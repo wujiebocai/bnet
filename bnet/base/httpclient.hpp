@@ -1,0 +1,58 @@
+#pragma once
+
+namespace bnet::base {
+	template<class StreamType, class ProtoType>
+	class http_client : public client<StreamType, ProtoType> {
+    public:
+        using super = client<StreamType, ProtoType>;
+        using super::super;
+        using handle_func_type = typename http::http_cli_router::handle_func_type;
+    public:
+        template<class Body = http::string_body, class Fields = http::fields>
+        inline bool execute(http::request<Body, Fields>& req, handle_func_type func) {
+            auto sptr = this->globalval_.sessions_.rand_get();
+            if (!sptr) {
+                return false;
+            }
+
+            sptr->cli_router().handle_func(func);
+
+            sptr->send(req);
+
+            return true;
+        }
+
+        template<class Body = http::string_body, class Fields = http::fields>
+        inline bool execute(http::web_request& req, handle_func_type func) {
+            auto sptr = this->globalval_.sessions_.rand_get();
+            if (!sptr) {
+                return false;
+            }
+
+            sptr->cli_router().handle_func(func);
+
+            sptr->send(req);
+
+            return true;
+        }
+
+        template<class Body = http::string_body, class Fields = http::fields>
+        inline bool execute(std::string_view url, handle_func_type func) {
+            auto sptr = this->globalval_.sessions_.rand_get();
+            if (!sptr) {
+                return false;
+            }
+
+            http::web_request req = http::make_request(url);
+			if (get_last_error()) {
+				return false;
+			}
+
+            sptr->cli_router().handle_func(func);
+
+            sptr->send(req);
+
+            return true;
+        }
+    };
+}
