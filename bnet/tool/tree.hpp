@@ -1,49 +1,26 @@
 #pragma once
 
-//#include <string>
-//#include <functional>
-//#include <memory>
-
-//#include <locale>
-//#include <codecvt>
-
-//#include <iostream>
-
-//#include "tool/util.hpp"
-
-// https://github.com/gin-gonic/gin  tree.go
+#include "utf8.hpp"
 
 namespace bnet::tool {
     enum class node_type : std::int8_t {
-		nt_static,      // 静态节点，比如上面的s，earch等节点
-		nt_root,        // 根节点
-		nt_param,       // 参数节点
-		nt_catchall,    // 有*匹配的节点
+		nt_static,
+		nt_root,
+		nt_param,
+		nt_catchall,
 	};
-
-    //using handle_func =  std::function<std::string()>;
 
     template<typename handle_func>
     class radix_tree {
     public:
         struct node {
-            // 节点路径
             std::string path_;
-            // 和children字段对应, 保存的是分裂的分支的第一个字符
-            // 例如search和support, 那么s节点的indices对应的"eu"
-            // 代表有两个分支, 分支的首字母分别是e和u
             std::string indeces_;
-            //节点是否是参数节点
             bool wild_child_;
-            // 节点类型
             node_type nt_;
-            // 优先级，子节点注册的handler数量
             std::uint32_t priority_;
-            // 子节点，参数类型节点，最多一个子节点
             std::vector<std::shared_ptr<node>> children_;
-            // 处理函数
             handle_func handlers_;
-            // 路径上最大参数个数
             std::string fullPath_;
         };
 
@@ -75,6 +52,15 @@ namespace bnet::tool {
         inline std::shared_ptr<node_value> get(const std::string& path, std::vector<param>* params, std::vector<skipped_node>& skipped_nodes, bool unescape) {
             return std::make_shared<node_value>(std::move(get_value(root_, path, params, skipped_nodes, unescape)));
         }
+
+        std::string find_case_insensitive_path(const std::string& path, bool fixTrailingSlash) {
+            // Use a static sized buffer on the stack in the common case.
+	        // If the path is too long, allocate a buffer on the heap instead.
+            char8_t rb[4] = {0};
+            auto cpath = find_case_insensitive_path_rec(root_, path, u8"", rb, fixTrailingSlash);
+
+            return std::move(std::string(cpath.begin(), cpath.end()));
+        }     
 
         inline const auto& root() { return root_;}
     protected:
@@ -487,7 +473,7 @@ walk:
                                     //auto i = (*value.params_).size();
                                     auto val = path.substr(0, end);
                                     if (unescape) {
-                                       // 有待实现
+                                       
                                     }
                                     (*value.params_).emplace_back(n->path_.substr(1), val);
                                 }
@@ -530,7 +516,7 @@ walk:
                                     //auto i = (*value.params_).size();
                                     auto val = path;
                                     if (unescape) {
-                                        // 有待实现
+                                       
                                     }
                                     (*value.params_).emplace_back(n->path_.substr(2), val);
                                 }
@@ -641,6 +627,278 @@ walk:
                 return value;
             }
         }
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////
+    char8_t* shift_nrune_bytes(char8_t rb[4], int n) {
+        switch (n) {
+        case 0:
+            return rb;
+        case 1:
+            {
+                rb[0] = rb[1];
+                rb[1] = rb[2];
+                rb[2] = rb[3];
+                rb[3] = 0;
+                return rb;
+            }
+            
+        case 2:
+            {
+                rb[0] = rb[2];
+                rb[1] = rb[3];
+                rb[2] = 0;
+                rb[3] = 0;
+                return rb;
+            }
+                
+        case 3:
+            {
+                rb[0] = rb[3];
+                rb[1] = 0;
+                rb[2] = 0;
+                rb[3] = 0;
+                return rb;
+            }
+        default:
+            {
+                rb[0] = 0;
+                rb[1] = 0;
+                rb[2] = 0;
+                rb[3] = 0;
+                return rb;
+            }
+        }
+    }
+
+    bool rune_start(char8_t c) {
+        return (c & 0xC0) != 0x80;
+    }
+
+    utf8_int32_t decode_rune_in_string(const std::string& str) {
+        //std::u8string u8str(str.begin(), str.end());
+        utf8_int32_t out;
+
+        utf8codepoint((char8_t*)(str.c_str()), &out);
+
+        return out;
+    }
+
+    int utf8_encode_rune(char32_t rune, char8_t rb[4]) {
+        auto* ret = utf8catcodepoint(rb, rune, 4);
+        if (!ret) {
+            return 0;
+        }
+
+        return ret - rb;
+    }
+
+    bool equal_fold(const std::string& str1, const std::string& str2) {
+        //std::u8string& ustr1(str1.begin(), str1.end()), ustr2(str2.begin(), str2.end());
+
+        auto ret = utf8casecmp((char8_t*)(str1.c_str()), (char8_t*)(str2.c_str()));
+        return (ret == 0);
+    }
+
+    void u8str_append(std::u8string& u8str, const std::string& str) {
+        u8str += std::u8string(str.begin(), str.end());
+    }
+
+    std::u8string find_case_insensitive_path_rec(std::shared_ptr<node> n, std::string path, std::u8string cipath, char8_t rb[4], bool fixTrailingSlash) {
+        auto npLen = n->path_.size();
+
+    walk: // Outer loop for walking the tree
+        while (path.size() >= npLen && (npLen == 0 || equal_fold(path.substr(1, npLen-1), n->path_.substr(1)))) {
+            // Add common prefix to result
+            auto old_path = path;
+            path = path.substr(npLen);
+            u8str_append(cipath, n->path_);
+
+            if (path.size() == 0) {
+                // We should have reached the node containing the handle.
+		        // Check if this node has a handle registered.
+                if (n->handlers_ != nullptr) {
+                    return cipath;
+                }
+                // No handle found.
+		        // Try to fix the path by adding a trailing slash
+                if (fixTrailingSlash) {
+                    for (size_t i = 0; i < n->indeces_.size(); i++) {
+                        char8_t cc = n->indeces_[i];
+                        if (cc == '/') {
+                            n = n->children_[i];
+                            if ((n->path_.size() == 1 && n->handlers_ != nullptr) ||
+                                (n->nt_ == node_type::nt_catchall && n->children_[0]->handlers_ != nullptr)) {
+                                cipath += '/';
+                                return cipath;
+                            }
+                            return u8"";
+                        }
+                    }
+                }
+                return u8"";
+            }
+
+            // If this node does not have a wildcard (param or catchAll) child,
+		    // we can just look up the next child node and continue to walk down
+		    // the tree
+            if (!n->wild_child_) {
+                // Skip rune bytes already processed
+                rb = shift_nrune_bytes(rb, npLen);
+                
+                if (rb[0] != 0) {
+                    // Old rune not finished
+                    auto idxc = rb[0];
+                    for (size_t i = 0; i < n->indeces_.size(); i++) {
+                        char8_t cc = n->indeces_[i];
+                        if (cc == idxc) {
+                            // continue with child node
+                            n = n->children_[i];
+                            npLen = n->path_.size();
+                            goto walk;
+                         }
+                    }
+                } else {
+                    // Process a new rune
+                    utf8_int32_t rv = 0;
+                    // Find rune start.
+				    // Runes are up to 4 byte long,
+				    // -4 would definitely be another rune.
+                    size_t off = 0;
+                    for (auto max = std::min(npLen, size_t(3)); off < max; off++) {
+                        if (auto i = npLen - off; rune_start(old_path[i])) {
+                            // read rune from cached path
+                            rv = decode_rune_in_string(old_path.substr(i));
+                            break;
+                        }
+                    }
+
+                    // Calculate lowercase bytes of current rune
+                    auto lo = utf8lwrcodepoint(rv);
+                    utf8_encode_rune(lo, rb);
+
+                    // Skip already processed bytes
+				    rb = shift_nrune_bytes(rb, off);
+
+                    auto idxc = rb[0];
+                    for (size_t i = 0; i < n->indeces_.size(); i++) {
+                        // Lowercase matches
+                        char8_t cc = n->indeces_[i];
+                        if (cc == idxc) {
+                            // must use a recursive approach since both the uppercase byte and the lowercase byte might exist as an index
+                            char8_t rbtmp[4];
+                            std::memmove(rbtmp, rb, sizeof(char8_t)*4);
+                            auto out = find_case_insensitive_path_rec(n->children_[i], path, cipath, rbtmp, fixTrailingSlash);
+                            if (out.size() > 0) {
+                                return out;
+                            }
+                            break;
+                        }
+                    }
+
+                    // If we found no match, the same for the uppercase rune,
+				    // if it differs
+                    if (auto up = utf8uprcodepoint(rv); up != lo) {
+                        utf8_encode_rune(up, rb);
+                        rb = shift_nrune_bytes(rb, off);
+
+                        auto idxc = rb[0];
+                        for (size_t i = 0; i < n->indeces_.size(); i++) {
+                            // Uppercase matches
+                            char8_t cc = n->indeces_[i];
+                            if (cc == idxc) {
+                                // Continue with child node
+                                n = n->children_[i];
+                                npLen = n->path_.size();
+                                goto walk;
+                            }
+                        }
+                    }
+                }
+
+                // Nothing found. We can recommend to redirect to the same URL
+			    // without a trailing slash if a leaf exists for that path
+                if (fixTrailingSlash && path == "/" && n->handlers_ != nullptr) {
+                    return cipath;
+                }
+
+                return u8"";
+            }
+
+            n = n->children_[0];
+            switch (n->nt_) {
+            case node_type::nt_param:
+                {
+                    // Find param end (either '/' or path end)
+                    size_t end = 0;
+                    while (end < path.size() && path[end] != '/') {
+                        end++;
+                    }
+                    
+                    // Add param value to case insensitive path
+                    u8str_append(cipath, path.substr(0, end));
+                    // We need to go deeper!
+                    if (end < path.size()) {
+                        if (n->children_.size() > 0) {
+                            // Continue with child node
+                            n = n->children_[0];
+                            npLen = n->path_.size();
+                            path = path.substr(end);
+                            continue;
+                        }
+
+                        // ... but we can't
+                        if (fixTrailingSlash && path.size() == end + 1) {
+                            return cipath;
+                        }
+                        return u8"";
+                    }
+
+                    if (n->handlers_ != nullptr) {
+                        return cipath;
+                    }
+
+                    if (fixTrailingSlash && n->children_.size() == 1) {
+                        // No handle found. Check if a handle for this path + a
+				        // trailing slash exists
+                        n = n->children_[0];
+                        if (n->path_ == "/" && n->handlers_ != nullptr) {
+                            cipath += '/';
+                            return cipath;
+                        }
+                    }
+
+                return u8"";
+                }
+                break;
+            case node_type::nt_catchall:
+                {
+                    u8str_append(cipath, path);
+                    return cipath;
+                }
+                break;
+            default:
+                std::string panicstr("invalid node type");
+                return u8"";
+            }
+        }
+            
+        // Nothing found.
+	    // Try to fix the path by adding / removing a trailing slash
+        if (fixTrailingSlash) {
+            if (path == "/") {
+                return cipath;
+            }
+
+            if (path.size() + 1 == npLen && n->path_[path.size()] == '/' &&
+                equal_fold(path.substr(1), n->path_.substr(1, path.size()-1)) && 
+                n->handlers_ != nullptr) {
+                u8str_append(cipath, n->path_);
+                return cipath;
+            }
+        }
+
+        return u8"";
+    }
 
     private:
         std::shared_ptr<node> root_;

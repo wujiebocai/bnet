@@ -25,8 +25,7 @@ namespace bnet::beast::http {
     This type must meet the requirements of <em>File</em>.
 */
 template<class TextBody, class FileBody>
-struct basic_flex_body
-{
+struct basic_flex_body {
     // Algorithm for storing buffers when parsing.
     class reader;
 
@@ -53,8 +52,7 @@ struct basic_flex_body
     which is attached to the message.
 */
 template<class TextBody, class FileBody>
-class basic_flex_body<TextBody, FileBody>::value_type
-{
+class basic_flex_body<TextBody, FileBody>::value_type {
 public:
 	using text_t = typename TextBody::value_type;
 	using file_t = typename FileBody::value_type;
@@ -81,42 +79,51 @@ public:
     value_type() = default;
 
     /// Constructor
-    value_type(value_type const&) = default;
-
-    /// Assignment
-    value_type& operator=(value_type const&) = default;
+    value_type(value_type const& o)
+        : text_(o.text_)
+        , file_(const_cast<file_t&&>(o.file_)) {}
 
     /// Constructor
-    value_type(value_type&& other) = default;
+    value_type(value_type&& o) 
+        : text_(o.text_)
+        , file_(std::move(o.file_)) {}
+
+    /// Assignment
+    value_type& operator=(value_type const& o) {
+        this->text_ = o.text_;
+        this->file_.operator=(o.file_);
+
+        return *this;
+    }
 
     /// Move assignment
-    value_type& operator=(value_type&& other) = default;
+    value_type& operator=(value_type&& o) {
+        this->text_ = o.text_;
+        this->file_.operator=(std::move(o.file_));
 
-	inline text_t& text() noexcept
-	{
+        return *this;
+    }
+
+	inline text_t& text() noexcept {
 		return text_;
 	}
 
-	inline text_t& text() const noexcept
-	{
+	inline text_t& text() const noexcept {
 		return const_cast<text_t&>(text_);
 	}
 
     /// Return the file
-	inline file_t& file() noexcept
-    {
+	inline file_t& file() noexcept {
         return file_;
     }
 
     /// Return the file
-	inline file_t& file() const noexcept
-    {
+	inline file_t& file() const noexcept {
         return const_cast<file_t&>(file_);
     }
 
     /// Returns the size of the text or file
-	inline std::uint64_t size() const noexcept
-    {
+	inline std::uint64_t size() const noexcept {
 		return (is_file() ? file_.size() : text_.size());
     }
 
@@ -124,8 +131,7 @@ public:
 	inline bool is_file() const noexcept { return file_.is_open(); }
 
     /// Convert the file body to text body.
-    inline bool to_text()
-    {
+    inline bool to_text() {
         if (this->is_text())
             return true;
 
@@ -142,8 +148,7 @@ public:
         text_.resize(std::size_t(this->size()));
 
         auto const nread = f.read(text_.data(), text_.size(), ec);
-        if (ec || nread != text_.size())
-        {
+        if (ec || nread != text_.size()) {
             text_.clear();
             return false;
         }
@@ -158,8 +163,7 @@ public:
 template<class TextBody, class FileBody>
 std::uint64_t
 basic_flex_body<TextBody, FileBody>::
-size(value_type const& body) noexcept
-{
+size(value_type const& body) noexcept {
     // Forward the call to the body
     return body.size();
 }
@@ -170,8 +174,7 @@ size(value_type const& body) noexcept
     to extract the buffers representing the body.
 */
 template<class TextBody, class FileBody>
-class basic_flex_body<TextBody, FileBody>::writer
-{
+class basic_flex_body<TextBody, FileBody>::writer {
 public:
 	using text_writer = typename TextBody::writer;
 	using file_writer = typename FileBody::writer;
@@ -254,8 +257,7 @@ template<class TextBody, class FileBody>
 void
 basic_flex_body<TextBody, FileBody>::
 writer::
-init(error_code& ec)
-{
+init(error_code& ec) {
     // The error_code specification requires that we
     // either set the error to some value, or set it
     // to indicate no error.
@@ -277,8 +279,7 @@ auto
 basic_flex_body<TextBody, FileBody>::
 writer::
 get(error_code& ec) ->
-std::optional<std::pair<const_buffers_type, bool>>
-{
+std::optional<std::pair<const_buffers_type, bool>> {
 	if (body_.is_file())
 		return file_writer_.get(ec);
 	else
@@ -291,8 +292,7 @@ std::optional<std::pair<const_buffers_type, bool>>
     to store incoming buffers representing the body.
 */
 template<class TextBody, class FileBody>
-class basic_flex_body<TextBody, FileBody>::reader
-{
+class basic_flex_body<TextBody, FileBody>::reader {
 public:
 	using text_reader = typename TextBody::reader;
 	using file_reader = typename FileBody::reader;
@@ -362,8 +362,7 @@ basic_flex_body<TextBody, FileBody>::
 reader::
 init(
 std::optional<std::uint64_t> const& content_length,
-    error_code& ec)
-{
+    error_code& ec) {
 	if (body_.is_file())
 		file_reader_.init(content_length, ec);
 	else
@@ -377,8 +376,7 @@ template<class ConstBufferSequence>
 std::size_t
 basic_flex_body<TextBody, FileBody>::
 reader::
-put(ConstBufferSequence const& buffers, error_code& ec)
-{
+put(ConstBufferSequence const& buffers, error_code& ec) {
 	if (body_.is_file())
 		return file_reader_.put(buffers, ec);
 	else
@@ -390,8 +388,7 @@ template<class TextBody, class FileBody>
 void
 basic_flex_body<TextBody, FileBody>::
 reader::
-finish(error_code& ec)
-{
+finish(error_code& ec) {
     // This has to be cleared before returning, to
     // indicate no error. The specification requires it.
 	if (body_.is_file())
@@ -405,14 +402,11 @@ finish(error_code& ec)
 template<class TextBody, class FileBody>
 std::ostream&
 operator<<(std::ostream& os,
-	typename basic_flex_body<TextBody, FileBody>::value_type const& body)
-{
-	if (body.is_text())
-	{
+	typename basic_flex_body<TextBody, FileBody>::value_type const& body) {
+	if (body.is_text()) {
 		os << body.text();
 	}
-	else
-	{
+	else {
 		NET_ASSERT(false);
 	}
 	return os;
@@ -425,14 +419,11 @@ using flex_body = basic_flex_body<http::string_body, http::file_body>;
 template<typename = void>
 std::ostream&
 operator<<(std::ostream& os,
-	typename flex_body::value_type const& body)
-{
-	if (body.is_text())
-	{
+	typename flex_body::value_type const& body) {
+	if (body.is_text()) {
 		os << body.text();
 	}
-	else
-	{
+	else {
         NET_ASSERT(false);
 	}
 	return os;

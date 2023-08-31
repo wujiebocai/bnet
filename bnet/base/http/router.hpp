@@ -38,20 +38,35 @@ namespace bnet::beast::http {
 
 	class http_cli_router {
 	public:
-		using handle_func_type =  std::function<void(http::web_request& req, http::web_response& rep)>;
+		using handle_func_type =  std::function<void(const error_code& ec, http::web_response& rep)>;
 
-		inline void handle_func(handle_func_type& func) {
+		inline void handle_func(const handle_func_type& func) {
 			handle_func_queue_.push_front(func);
 		}
 
-		inline handle_func_type handle() {
+		template<class ... Args>
+		inline void handle(Args&&... args) {
 			if (handle_func_queue_.size() <= 0) {
-				return nullptr;
+				return;
 			}
 			auto func = handle_func_queue_.back();
+			if (func) {
+				func(std::forward<Args>(args)...);
+			}
 			handle_func_queue_.pop_back();
-			return func;
+			return;
 		}
+
+		template<class ... Args>
+		inline void handle_all(Args&&... args) {
+			for (auto f : handle_func_queue_) {
+				if (f) {
+					f(std::forward<Args>(args)...);
+				}
+			}
+			handle_func_queue_.clear();
+		}
+	
 	protected:
 		std::deque<handle_func_type> handle_func_queue_;
 	};

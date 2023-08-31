@@ -1,12 +1,10 @@
 #pragma once
 
-#define NET_USE_SSL
 #include <asio.hpp>
 #if defined(NET_USE_SSL)
 #include <asio/ssl.hpp>
 #endif
 
-#define NET_USE_HTTP
 #if defined(NET_USE_HTTP)
 #ifndef BEAST_HEADER_ONLY
 #define BEAST_HEADER_ONLY 1
@@ -29,9 +27,6 @@ namespace bnet {
 #include "base/client.hpp"
 #include "base/httpserver.hpp"
 #include "base/httpclient.hpp"
-
-//#include "tool/bytebuffer.hpp"
-//#include "tool/msg_proxy.hpp"
 
 /*
 net：
@@ -74,13 +69,13 @@ using kcp_stream_c = base::kcp_stream<udp_socket_c, base::cli_tag>;
 // proto type
 using default_proto = base::proto<>;
 #if defined(NET_USE_HTTP)
-using http_s_proto = base::http_proto<base::svr_tag>;
-using http_c_proto = base::http_proto<base::cli_tag>;
-using ws_s_proto = base::ws_proto<base::svr_tag>;
-using ws_c_proto = base::ws_proto<base::cli_tag>;
+using http_proto_s = base::http_proto<base::svr_tag>;
+using http_proto_c = base::http_proto<base::cli_tag>;
+using ws_proto_s = base::ws_proto<base::svr_tag>;
+using ws_proto_c = base::ws_proto<base::cli_tag>;
 #endif
 
-using Timer = base::Timer;
+using base::Timer;
 
 // tcp
 using tcp_svr = base::server<tcp_binary_stream, default_proto>;
@@ -102,26 +97,26 @@ using kcp_cli = base::client<kcp_stream_c, default_proto>;
 
 // ws
 #if defined(NET_USE_HTTP)
-using ws_svr = base::server<ws_stream, ws_s_proto>;
-using ws_cli = base::client<ws_stream, ws_c_proto>;
+using ws_svr = base::server<ws_stream, ws_proto_s>;
+using ws_cli = base::client<ws_stream, ws_proto_c>;
 #endif
 
 // wss
 #if defined(NET_USE_SSL) && defined(NET_USE_HTTP)
-using wss_svr = base::server<wss_stream, ws_s_proto>;
-using wss_cli = base::client<wss_stream, ws_c_proto>;
+using wss_svr = base::server<wss_stream, ws_proto_s>;
+using wss_cli = base::client<wss_stream, ws_proto_c>;
 #endif
 
 // http
 #if defined(NET_USE_HTTP)
-using http_svr = base::http_server<tcp_binary_stream, http_s_proto>;
-using http_cli = base::http_client<tcp_binary_stream, http_c_proto>;
+using http_svr = base::http_server<tcp_binary_stream, http_proto_s>;
+using http_cli = base::http_client<tcp_binary_stream, http_proto_c>;
 #endif
 
 // https
 #if defined(NET_USE_SSL) && defined(NET_USE_HTTP)
-using https_svr = base::http_server<tcp_ssl_stream, http_s_proto>;
-using https_cli = base::http_client<tcp_ssl_stream, http_c_proto>;
+using https_svr = base::http_server<tcp_ssl_stream, http_proto_s>;
+using https_cli = base::http_client<tcp_ssl_stream, http_proto_c>;
 #endif
 
 }

@@ -47,22 +47,28 @@ public:
 		: SvrType(concurrency, max_buffer_size)
 		, ctimer_(g_context_, asio::chrono::seconds(0)) {
 
-		this->bind(base::event::connect, [&](session_ptr_type& ptr, error_code ec) {
-			std::cout << "connect" << ec.message() << ", " << this->session_count() << std::endl;
+		this->bind(event::connect, [&]([[maybe_unused]]session_ptr_type& ptr) {
+			std::cout << "connect success" << ", " << this->session_count() << std::endl;
 			//ptr->stop(ec);
 		});
-		this->bind(base::event::handshake, [](session_ptr_type& ptr, error_code ec) { // only ssl call back
+		this->bind(event::handshake, []([[maybe_unused]]session_ptr_type& ptr, error_code ec) { // only ssl call back
 			std::cout << "handshake" << ec.message() << std::endl;
 		});
-		this->bind(base::event::disconnect, [](session_ptr_type& ptr, error_code ec) {
+		this->bind(event::disconnect, []([[maybe_unused]]session_ptr_type& ptr, error_code ec) {
 			std::cout << "disconnect" << ec.message() << std::endl;
 		});
-		this->bind(base::event::recv, [&](session_ptr_type& ptr, std::string_view&& s) {
+		this->bind(event::recv, [&]([[maybe_unused]]session_ptr_type& ptr, std::string_view&& s) {
 			//std::cout << s << count_ << std::endl;
 			//count_.fetch_add(s.size());
 			ptr->send(std::move(s));
 			++count_;
 		});
+
+		this->bind(event::upgrade, &svr_proxy::upgrade, this);
+	}
+
+	inline void upgrade([[maybe_unused]]session_ptr_type& ptr, error_code ec) {
+		std::cout << "upgrade" << ec.message() << std::endl;
 	}
 
 	inline void test_timer() {
@@ -101,58 +107,57 @@ public:
 	cli_proxy(std::size_t concurrency = std::thread::hardware_concurrency() * 2, std::size_t max_buffer_size = (std::numeric_limits<std::size_t>::max)())
 		: CliType(concurrency, max_buffer_size) {
 
-		this->bind(base::event::connect, [](session_ptr_type& ptr, error_code ec) {
-			if (!ec) {
-				std::string msgdata(1024, 'a');
+		this->bind(event::connect, []([[maybe_unused]]session_ptr_type& ptr) {
+			std::string msgdata(1024, 'a');
 			
-				//ptr->send("a");
+			ptr->send("a");
 				
-				/*
-				base::http::web_request req;
-				req.method(beast::http::verb::get);
-				req.keep_alive(true);
-				req.target("/del_user");
-				req.body() = "Hello, world!";
-				req.prepare_payload();
-				ptr->send(req.base());
-				*/
-			}
-			std::cout << "client connect" << ec.message() << std::endl;
+			/*
+			base::http::web_request req;
+			req.method(beast::http::verb::get);
+			req.keep_alive(true);
+			req.target("/del_user");
+			req.body() = "Hello, world!";
+			req.prepare_payload();
+			ptr->send(req.base());
+			*/
+			std::cout << "client connect success" << std::endl;
 		});
-		this->bind(base::event::handshake, [](session_ptr_type& ptr, error_code ec) { // only ssl call back
+		this->bind(event::handshake, []([[maybe_unused]]session_ptr_type& ptr, error_code ec) { // only ssl call back
 			std::cout << "client handshake" << ec.message() << std::endl;
 		});
-		this->bind(base::event::disconnect, [](session_ptr_type& ptr, error_code ec) {
+		this->bind(event::disconnect, []([[maybe_unused]]session_ptr_type& ptr, error_code ec) {
 			std::cout << "client disconnect" << ec.message() << std::endl;
 			if (ec) {
 				//ptr->reconn(); //测试异常退出重连
 			}
 			//ptr->reconn();
 		});
-		this->bind(base::event::recv, [](session_ptr_type& ptr, std::string_view&& s) {
+		this->bind(event::recv, []([[maybe_unused]]session_ptr_type& ptr, std::string_view&& s) {
 			ptr->send(std::move(s));
 		});
 	}
 };
 
 void tcp_tst() {
-#if 1
+#if 0
 	// svr
 	static auto tcpsvr = svr_proxy<tcp_svr>(8);
 	tcpsvr.start("0.0.0.0", "8585");
     tcpsvr.test_timer();
+	std::this_thread::sleep_for(std::chrono::milliseconds(2000));
     //cli
     static auto tcpcli = cli_proxy<tcp_cli>(5);
     tcpcli.start();
-    for (int i = 0; i < 44; ++i) {
-        tcpcli.add("127.0.0.1", "8585");
+    for (int i = 0; i < 5000; ++i) {
+        tcpcli.add("192.168.152.62", "8585");
     }
 	//std::this_thread::sleep_for(std::chrono::milliseconds(2000));
 #endif
 }
 
 void udp_tst() {
-#if 1
+#if 0
 	// svr
 	static auto udp_svr_ptr = std::make_shared<svr_proxy<udp_svr>>(8);
 	udp_svr_ptr->start("0.0.0.0", "8585");
@@ -167,7 +172,7 @@ void udp_tst() {
 }
 
 void kcp_tst() {
-#if 1
+#if 0
 	// svr
 	static auto kcp_svr_ptr = std::make_shared<svr_proxy<kcp_svr>>(8);
 	kcp_svr_ptr->start("0.0.0.0", "8585");
@@ -175,33 +180,83 @@ void kcp_tst() {
     //cli
     static auto kcp_cli_ptr = std::make_shared<cli_proxy<kcp_cli>>(5);
     kcp_cli_ptr->start();
-    for (int i = 0; i < 10000; ++i) {
+    for (int i = 0; i < 5000; ++i) {
         kcp_cli_ptr->add("127.0.0.1", "8585");
     }
 #endif
 }
 
+std::atomic<std::size_t> httpcount{ 0 };
 void http_tst() {
 #if defined(NET_USE_HTTP)
 	// svr
-  	static auto http_svr_ptr = std::make_shared<http_svr_proxy<http_svr>>(8);
-  	http_svr_ptr->start("0.0.0.0", "8888");
+  	static auto http_svr_ptr = std::make_shared<http_svr_proxy<http_svr>>(6);
+  	http_svr_ptr->start("0.0.0.0", "18888");
 	//http_svr_ptr->test_timer();
 	//cli
-	static auto http_cli_ptr = std::make_shared<http_cli_proxy<http_cli>>(5);
+	static auto http_cli_ptr = std::make_shared<http_cli_proxy<http_cli>>(3);
 	http_cli_ptr->start();
 	for (int i = 0; i < 1; ++i) {
-		http_cli_ptr->add<false>("127.0.0.1", "8888");
+		http_cli_ptr->add<false>("192.168.39.63", "9902");
 	}
-	std::string_view msg("GET /api/user/tt HTTP/1.1\r\n\r\n");
-	http_cli_ptr->execute(msg, [](http::web_request& req, http::web_response& rep) {
+	auto start_time = get_cur_time();
+	http_cli_ptr->execute("GET /check?name=aaa&ip=127.0.0.1 HTTP/1.1\r\n\r\n", [start_time]([[maybe_unused]]const error_code& ec, http::web_response& rep) mutable {
+		if (ec) {
+			std::cout << "errmsg: " << ec.message() << std::endl;
+		}
+
 		std::cout << "client:" << rep << std::endl;
 	});
+
+	auto rsp = http::execute("http://192.168.39.63:9902/check?name=aaa&ip=127.0.0.1");
+	std::cout << "sssssssssssssssss:" << rsp << std::endl;
+	return;
+	std::string_view msg("GET /api/user/tt HTTP/1.1\r\n\r\n");
+	for (int i = 0; i < 100000; ++i) {
+	http_cli_ptr->execute(msg, [start_time]([[maybe_unused]]const error_code& ec, http::web_response& rep) mutable {
+		//std::cout << "client:" << rep << std::endl;
+		if (ec) {
+			std::cout << "errmsg: " << ec.message() << std::endl;
+		}
+
+		httpcount.fetch_add(1);
+		if (httpcount.load() == 300000) {
+			auto end_time = get_cur_time();
+			std::cout << "======================================================= " << httpcount << " " << (end_time - start_time) << std::endl;
+		}
+	});
+	http_cli_ptr->execute(msg, [start_time]([[maybe_unused]]const error_code& ec, [[maybe_unused]]http::web_response& rep) {
+		//std::cout << "client2:" << rep << std::endl;
+		if (ec) {
+			std::cout << "errmsg: " << ec.message() << std::endl;
+		}
+
+		httpcount.fetch_add(1);
+		if (httpcount.load() == 300000) {
+			auto end_time = get_cur_time();
+			std::cout << "======================================================= " << httpcount << " " << (end_time - start_time) << std::endl;
+		}
+	});
+
+	http_cli_ptr->execute(msg, [start_time]([[maybe_unused]]const error_code& ec, [[maybe_unused]]http::web_response& rep) {
+		//std::cout << "client3:" << rep << std::endl;
+		//std::cout << "client3:" << rep.body().text() << std::endl;
+		if (ec) {
+			std::cout << "errmsg: " << ec.message() << std::endl;
+		}
+
+		httpcount.fetch_add(1);
+		if (httpcount.load() == 300000) {
+			auto end_time = get_cur_time();
+			std::cout << "======================================================= " << httpcount << " " << (end_time - start_time) << std::endl;
+		}
+	});
+	}
 #endif
 }
 
 void ws_tst() {
-#if defined(NET_USE_HTTP)
+#if 0 //defined(NET_USE_HTTP)
 	// svr
   	static auto ws_svr_ptr = std::make_shared<svr_proxy<ws_svr>>(8);
   	ws_svr_ptr->start("0.0.0.0", "8888");
@@ -209,14 +264,14 @@ void ws_tst() {
 	//cli
 	static auto ws_cli_ptr = std::make_shared<cli_proxy<ws_cli>>(5);
 	ws_cli_ptr->start();
-	for (int i = 0; i < 30000; ++i) {
+	for (int i = 0; i < 5000; ++i) {
 		ws_cli_ptr->add("127.0.0.1", "8888");
 	}
 #endif
 }
 
 void wss_tst() {
-#if defined(NET_USE_SSL) && defined(NET_USE_HTTP)
+#if 0 //defined(NET_USE_SSL) && defined(NET_USE_HTTP)
 	// svr
 	static auto wss_svr_ptr = std::make_shared<svr_proxy<wss_svr>>(8);
     wss_svr_ptr->set_verify_mode(asio::ssl::verify_peer | asio::ssl::verify_fail_if_no_peer_cert);
@@ -252,6 +307,9 @@ void timer_tst() {
 	int count = 0;
 	static bnet::Timer timer(g_context_);
 	timer.start(std::chrono::seconds(5), [count](std::error_code& ec) mutable {
+		if (ec) {
+			std::cerr << "err: " << ec.message() << std::endl;
+		}
 		print_time();
 
 		count++;
@@ -264,16 +322,17 @@ void timer_tst() {
 void tree_tst() {
 	auto start_time = get_cur_time();
 
-  	for (int i = 0; i < 100; i++) {
-    	test_rount ();
-  	}
+  	//for (int i = 0; i < 100; i++) {
+    	test_case_insensitive_route();
+  	//}
 
   	auto end_time1 = get_cur_time();
 	std::cout << "Path 1 matches the route. cost time:" << (end_time1 - start_time) << std::endl;
 }
 
-int main(int argc, char * argv[]) {
-	kcp_tst();
+//int main(int argc, char * argv[]) {
+int main() {
+	http_tst();
 	std::cout << "ssssssssssssssstop" << std::endl;
 
 	asio::signal_set signals(g_context_, SIGINT, SIGTERM);

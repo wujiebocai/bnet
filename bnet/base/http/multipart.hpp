@@ -128,8 +128,7 @@ public:
     /*
 	 * Returns the value by name, or `""` if it does not exist.
      */
-	inline const basic_multipart_field<String>& operator[](const String& name)
-	{
+	inline const basic_multipart_field<String>& operator[](const String& name) {
 		auto it = find(name);
 		if (it == cend())
 			return dummy_;
@@ -137,46 +136,39 @@ public:
 	}
 
 	/// Return a const iterator to the beginning of the field sequence.
-	inline iterator begin() noexcept
-	{
+	inline iterator begin() noexcept {
 		return list_.begin();
 	}
 
 	/// Return a const iterator to the end of the field sequence.
-	inline iterator end() noexcept
-	{
+	inline iterator end() noexcept {
 		return list_.end();
 	}
 
 	/// Return a const iterator to the beginning of the field sequence.
-	inline const_iterator begin() const noexcept
-	{
+	inline const_iterator begin() const noexcept {
 		return list_.begin();
 	}
 
 	/// Return a const iterator to the end of the field sequence.
-	inline const_iterator end() const noexcept
-	{
+	inline const_iterator end() const noexcept {
 		return list_.end();
 	}
 
 	/// Return a const iterator to the beginning of the field sequence.
-	inline const_iterator cbegin() const noexcept
-	{
+	inline const_iterator cbegin() const noexcept {
 		return list_.cbegin();
 	}
 
 	/// Return a const iterator to the end of the field sequence.
-	inline const_iterator cend() const noexcept
-	{
+	inline const_iterator cend() const noexcept {
 		return list_.cend();
 	}
 
     /*
 	 * Remove all fields from the container
      */
-	inline void clear() noexcept
-	{
+	inline void clear() noexcept {
 		set_.clear();
 		list_.clear();
 	}
@@ -185,8 +177,7 @@ public:
 	 * Insert a field.
      */
 	template<class String1, class String2>
-	inline iterator insert(String1&& name, String2&& value)
-	{
+	inline iterator insert(String1&& name, String2&& value) {
 		basic_multipart_field<String> field;
 		field.name (std::forward<String1>(name ));
 		field.value(std::forward<String2>(value));
@@ -199,8 +190,7 @@ public:
     /*
 	 * Insert a field.
      */
-	inline iterator insert(basic_multipart_field<String> field)
-	{
+	inline iterator insert(basic_multipart_field<String> field) {
 		auto iter = set_.emplace(field.name(), std::addressof(field));
 		auto itel = list_.insert(std::next(list_.begin(), std::distance(set_.begin(), iter)), std::move(field));
 		iter->second = itel.operator->();
@@ -211,8 +201,7 @@ public:
 	 * Set a field value, removing any other instances of that field.
      */
 	template<class String1, class String2>
-	inline iterator set(String1&& name, String2&& value)
-	{
+	inline iterator set(String1&& name, String2&& value) {
 		basic_multipart_field<String> field;
 		field.name (std::forward<String1>(name ));
 		field.value(std::forward<String2>(value));
@@ -226,8 +215,7 @@ public:
     /*
 	 * Remove a field.
      */
-	inline const_iterator erase(const_iterator pos)
-	{
+	inline const_iterator erase(const_iterator pos) {
 		auto next = pos;
 		auto iter = set_.erase(std::next(set_.begin(), std::distance(list_.cbegin(), pos)));
 		auto itel = list_.erase(pos);
@@ -237,8 +225,7 @@ public:
     /*
 	 * Remove all fields with the specified name.
      */
-	inline std::size_t erase(const String& name)
-	{
+	inline std::size_t erase(const String& name) {
 		auto result = set_.equal_range(name);
 		if (result.first == result.second)
 			return std::size_t(0);
@@ -257,16 +244,14 @@ public:
     /*
 	 * Return the number of fields with the specified name.
      */
-	inline std::size_t count(const String& name) const
-	{
+	inline std::size_t count(const String& name) const {
 		return set_.count(name);
 	}
 
     /*
 	 * Find the multipart field iterator by name.
      */
-	inline iterator find(const String& name)
-	{
+	inline iterator find(const String& name) {
 		auto it = set_.find(name);
 		if (it == set_.end())
 			return list_.end();
@@ -276,8 +261,7 @@ public:
     /*
 	 * Find the multipart field iterator by name.
      */
-	inline const_iterator find(const String& name) const
-	{
+	inline const_iterator find(const String& name) const {
 		auto it = set_.find(name);
 		if (it == set_.end())
 			return list_.cend();
@@ -287,8 +271,7 @@ public:
     /*
 	 * Returns a range of iterators to the fields with the specified name.
      */
-	inline std::pair<const_iterator, const_iterator> equal_range(const String& name) const
-	{
+	inline std::pair<const_iterator, const_iterator> equal_range(const String& name) const {
 		auto result = set_.equal_range(name);
 		if (result.first == result.second)
 			return { list_.cend(), list_.cend() };
@@ -312,12 +295,10 @@ using multipart_fields = basic_multipart_fields<std::string>;
  * Convert a multipart fields to a string.
  */
 template<class String>
-inline std::string to_string(const basic_multipart_fields<String>& fields)
-{
+inline std::string to_string(const basic_multipart_fields<String>& fields) {
 	std::string body;
 	std::string::size_type size = 0;
-	for (auto it = fields.begin(); it != fields.end(); ++it)
-	{
+	for (auto it = fields.begin(); it != fields.end(); ++it) {
 		size += fields.boundary().size() + 2 + 2;
 		size += it->content_disposition      ().size() + 22;
 		size += it->name                     ().size() + 10;
@@ -327,43 +308,37 @@ inline std::string to_string(const basic_multipart_fields<String>& fields)
 		size += it->content_transfer_encoding().size() + (it->content_transfer_encoding().empty() ? 0 : 29);
 	}
 	body.reserve(size + fields.boundary().size() + 2 + 2 + 2);
-	for (auto it = fields.begin(); it != fields.end(); ++it)
-	{
+	for (auto it = fields.begin(); it != fields.end(); ++it) {
 		body += "--";
 		body += fields.boundary();
 		body += CRLF;
 		body += "Content-Disposition: ";
 		body += it->content_disposition();
-		if (!it->name().empty())
-		{
+		if (!it->name().empty()) {
 			body += "; ";
 			body += "name=\"";
 			body += it->name();
 			body += "\"";
 		}
-		if (!it->filename().empty())
-		{
+		if (!it->filename().empty()) {
 			body += "; ";
 			body += "filename=\"";
 			body += it->filename();
 			body += "\"";
 		}
 		body += CRLF;
-		if (!it->content_type().empty())
-		{
+		if (!it->content_type().empty()) {
 			body += "Content-Type: ";
 			body += it->content_type();
 			body += CRLF;
 		}
-		if (!it->content_transfer_encoding().empty())
-		{
+		if (!it->content_transfer_encoding().empty()) {
 			body += "Content-Transfer-Encoding: ";
 			body += it->content_transfer_encoding();
 			body += CRLF;
 		}
 		body += CRLF;
-		if (!it->value().empty())
-		{
+		if (!it->value().empty()) {
 			body += it->value();
 		}
 		body += CRLF;
@@ -377,16 +352,13 @@ inline std::string to_string(const basic_multipart_fields<String>& fields)
 
 /// Write the text for a multipart fields to an output stream.
 template<class String>
-inline std::ostream& operator<<(std::ostream& os, const basic_multipart_fields<String>& fields)
-{
+inline std::ostream& operator<<(std::ostream& os, const basic_multipart_fields<String>& fields) {
 	return os << to_string(fields);
 }
 
-namespace multipart_parser
-{
+namespace multipart_parser {
 	template<class String>
-	inline bool parse_field(basic_multipart_field<String>& field, std::string_view content)
-	{
+	inline bool parse_field(basic_multipart_field<String>& field, std::string_view content) {
 		// 8 == "\r\n" "\r\n\r\n" "\r\n"
 		if (content.size() < 8)
 			return false;
@@ -413,8 +385,7 @@ namespace multipart_parser
 		std::string_view::size_type pos_row_1 = static_cast<std::string_view::size_type>( 0);
 		std::string_view::size_type pos_row_2 = static_cast<std::string_view::size_type>(-2);
 
-		for(;;)
-		{
+		for(;;) {
 			pos_row_1 = pos_row_2 + 2;
 			pos_row_2 = header.find("\r\n", pos_row_1);
 
@@ -432,20 +403,17 @@ namespace multipart_parser
 
 			++pos1;
 
-			if /**/(iequals(type, "Content-Disposition"))
-			{
+			if /**/(iequals(type, "Content-Disposition")) {
 				auto pos2 = header_row.find(';', pos1);
 
 				std::string_view disposition = header_row.substr(pos1, pos2 == std::string_view::npos ? pos2 : pos2 - pos1);
 				tool::trim_both(disposition);
 				field.content_disposition(disposition);
 
-				if (pos2 != std::string_view::npos)
-				{
+				if (pos2 != std::string_view::npos) {
 					std::string_view kvs = header_row.substr(pos2 + 1);
 
-					for (pos2 = 0;;)
-					{
+					for (pos2 = 0;;) {
 						auto pos3 = kvs.find(';', pos2);
 
 						std::string_view kv = kvs.substr(pos2, pos3 == std::string_view::npos ? pos3 : pos3 - pos2);
@@ -475,16 +443,13 @@ namespace multipart_parser
 					}
 				}
 			}
-			else if (iequals(type, "Content-Type"))
-			{
+			else if (iequals(type, "Content-Type")) {
 				field.content_type(header_row.substr(pos1 + 1));
 			}
-			else if (iequals(type, "Content-Transfer-Encoding"))
-			{
+			else if (iequals(type, "Content-Transfer-Encoding")) {
 				field.content_transfer_encoding(header_row.substr(pos1 + 1));
 			}
-			else
-			{
+			else {
 				NET_ASSERT(false);
 			}
 
@@ -499,8 +464,7 @@ namespace multipart_parser
 }
 
 template<class String = std::string>
-basic_multipart_fields<String> multipart_parser_execute(std::string_view body, std::string_view boundary)
-{
+basic_multipart_fields<String> multipart_parser_execute(std::string_view body, std::string_view boundary) {
 	using namespace multipart_parser;
 
 	basic_multipart_fields<String> fields{};
@@ -511,8 +475,7 @@ basic_multipart_fields<String> multipart_parser_execute(std::string_view body, s
 
 	std::string_view bound = full_boundary;
 
-	for (std::size_t i = 0; i < body.size();)
-	{
+	for (std::size_t i = 0; i < body.size();) {
 		basic_multipart_field<String> field{};
 
 		// find first boundary
@@ -523,18 +486,15 @@ basic_multipart_fields<String> multipart_parser_execute(std::string_view body, s
 
 		// check whether is the end.
 		std::string_view tail = body.substr(i + 0, 2);
-		if (tail == "--")
-		{
+		if (tail == "--") {
 			i += 2;
 
-			if (i < body.size())
-			{
+			if (i < body.size()) {
 				if (body[i] != CR)
 					break;
 				++i;
 			}
-			if (i < body.size())
-			{
+			if (i < body.size()) {
 				if (body[i] != LF)
 					break;
 				++i;
@@ -562,8 +522,7 @@ basic_multipart_fields<String> multipart_parser_execute(std::string_view body, s
 }
 
 template<bool isRequest, class Body, class Fields, class String = std::string>
-basic_multipart_fields<String> multipart_parser_execute(const http::message<isRequest, Body, Fields>& msg)
-{
+basic_multipart_fields<String> multipart_parser_execute(const http::message<isRequest, Body, Fields>& msg) {
 	std::string_view type = msg[http::field::content_type];
 
 	std::size_t pos1 = tool::ifind(type, "multipart/form-data");

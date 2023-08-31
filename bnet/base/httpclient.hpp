@@ -15,9 +15,7 @@ namespace bnet::base {
                 return false;
             }
 
-            sptr->cli_router().handle_func(func);
-
-            sptr->send(req);
+            sptr->send(req, func);
 
             return true;
         }
@@ -29,9 +27,7 @@ namespace bnet::base {
                 return false;
             }
 
-            sptr->cli_router().handle_func(func);
-
-            sptr->send(req);
+            sptr->send(req, func);
 
             return true;
         }
@@ -48,9 +44,7 @@ namespace bnet::base {
 				return false;
 			}
 
-            sptr->cli_router().handle_func(func);
-
-            sptr->send(req);
+            sptr->send(req, func);
 
             return true;
         }

@@ -116,7 +116,7 @@ uint32_t check_priorities(const std::shared_ptr<redix_tree::node>& node) {
     return prio;
 }
 
-void test_rount () {
+void test_route () {
     redix_tree tree;
 
     for (auto &&i : routes) {
@@ -247,4 +247,169 @@ void test_rount () {
 	});
 
 	check_priorities(tree.root());
+}
+
+/////////////////////////////////////////////////////////////////////////////////////////////////
+struct tst {
+	std::string in = "";
+	std::string out = "";
+	bool found = false;
+	bool slash = false;
+};
+void test_case_insensitive_route() {
+	std::string ostr(128, 'o');
+	std::string Ostr(128, 'O');
+	std::string longpath = "/l" + ostr + "ng";
+	std::string lOngpath = "/l" + Ostr + "ng/";
+	const static std::string routes_tst[] = {
+		"/hi",
+		"/b/",
+		"/ABC/",
+		"/search/:query",
+		"/cmd/:tool/",
+		"/src/*filepath",
+		"/x",
+		"/x/y",
+		"/y/",
+		"/y/z",
+		"/0/:id",
+		"/0/:id/1",
+		"/1/:id/",
+		"/1/:id/2",
+		"/aa",
+		"/a/",
+		"/doc",
+		"/doc/go_faq.html",
+		"/doc/go1.html",
+		"/doc/go/away",
+		"/no/a",
+		"/no/b",
+		"/Π",
+		"/u/apfêl/",
+		"/u/äpfêl/",
+		"/u/öpfêl",
+		"/v/Äpfêl/",
+		"/v/Öpfêl",
+		"/w/♬",  // 3 byte
+		"/w/♭/", // 3 byte, last byte differs
+		"/w/𠜎",  // 4 byte
+		"/w/𠜏/", // 4 byte
+		longpath,
+	};
+
+	redix_tree tree;
+
+    for (auto &&i : routes_tst) {
+        if (auto ret = tree.add(i, [&](){ return i;}); !ret) {
+			std::cerr << "tree add path fail " << i << std::endl;
+		}    
+    }
+
+	
+	for (auto &&i : routes_tst) {
+		auto ret = tree.find_case_insensitive_path(i, true);
+		if (ret.size() <= 0) {
+			std::cerr << "Route not found! rount:" << i  << std::endl;
+			continue;
+		}
+		if (ret != i) {
+			std::cerr << "Wrong result for route " << i << " : " << ret << std::endl;
+		}
+	}
+	
+	for (auto &&i : routes_tst) {
+		auto ret = tree.find_case_insensitive_path(i, false);
+		if (ret.size() <= 0) {
+			std::cerr << "Route not found! rount:" << i  << std::endl;
+			continue;
+		}
+		if (ret != i) {
+			std::cerr << "Wrong result for route " << i << " : " << ret << std::endl;
+		}
+	}
+
+	const static tst tests[] = {
+		{"/HI", "/hi", true, false},
+		{"/HI/", "/hi", true, true},
+		{"/B", "/b/", true, true},
+		{"/B/", "/b/", true, false},
+		{"/abc", "/ABC/", true, true},
+		{"/abc/", "/ABC/", true, false},
+		{"/aBc", "/ABC/", true, true},
+		{"/aBc/", "/ABC/", true, false},
+		{"/abC", "/ABC/", true, true},
+		{"/abC/", "/ABC/", true, false},
+		{"/SEARCH/QUERY", "/search/QUERY", true, false},
+		{"/SEARCH/QUERY/", "/search/QUERY", true, true},
+		{"/CMD/TOOL/", "/cmd/TOOL/", true, false},
+		{"/CMD/TOOL", "/cmd/TOOL/", true, true},
+		{"/SRC/FILE/PATH", "/src/FILE/PATH", true, false},
+		{"/x/Y", "/x/y", true, false},
+		{"/x/Y/", "/x/y", true, true},
+		{"/X/y", "/x/y", true, false},
+		{"/X/y/", "/x/y", true, true},
+		{"/X/Y", "/x/y", true, false},
+		{"/X/Y/", "/x/y", true, true},
+		{"/Y/", "/y/", true, false},
+		{"/Y", "/y/", true, true},
+		{"/Y/z", "/y/z", true, false},
+		{"/Y/z/", "/y/z", true, true},
+		{"/Y/Z", "/y/z", true, false},
+		{"/Y/Z/", "/y/z", true, true},
+		{"/y/Z", "/y/z", true, false},
+		{"/y/Z/", "/y/z", true, true},
+		{"/Aa", "/aa", true, false},
+		{"/Aa/", "/aa", true, true},
+		{"/AA", "/aa", true, false},
+		{"/AA/", "/aa", true, true},
+		{"/aA", "/aa", true, false},
+		{"/aA/", "/aa", true, true},
+		{"/A/", "/a/", true, false},
+		{"/A", "/a/", true, true},
+		{"/DOC", "/doc", true, false},
+		{"/DOC/", "/doc", true, true},
+		{"/NO", "", false, true},
+		{"/DOC/GO", "", false, true},
+		//{"/π", "/Π", true, false},
+		//{"/π/", "/Π", true, true},
+		{"/u/ÄPFÊL/", "/u/äpfêl/", true, false},
+		{"/u/ÄPFÊL", "/u/äpfêl/", true, true},
+		{"/u/ÖPFÊL/", "/u/öpfêl", true, true},
+		{"/u/ÖPFÊL", "/u/öpfêl", true, false},
+		{"/v/äpfêL/", "/v/Äpfêl/", true, false},
+		{"/v/äpfêL", "/v/Äpfêl/", true, true},
+		{"/v/öpfêL/", "/v/Öpfêl", true, true},
+		{"/v/öpfêL", "/v/Öpfêl", true, false},
+		{"/w/♬/", "/w/♬", true, true},
+		{"/w/♭", "/w/♭/", true, true},
+		{"/w/𠜎/", "/w/𠜎", true, true},
+		{"/w/𠜏", "/w/𠜏/", true, true},
+		{lOngpath, longpath, true, true},
+	};
+
+	for (auto &&test : tests) {
+		auto ret = tree.find_case_insensitive_path(test.in, true);
+		auto found = (ret.size() > 0);
+		if (found != test.found || (found && (ret != test.out))) {
+			std::cerr << "Wrong result for :" << test.in << ", found:" << found << ", want:" << test.out << ", want found:" << test.found << std::endl;
+		}
+		//if (*ret != test.out) {
+		//	std::cerr << "Wrong result for " << test.in << " : get" << *ret << " ; want " << test.out << std::endl;
+		//}
+	}
+
+	for (auto &&test : tests) {
+		auto ret = tree.find_case_insensitive_path(test.in, false);
+		auto found = (ret.size() > 0);
+		if (test.slash) {
+			if (found) {
+				std::cerr << "Found without fixTrailingSlash: " << test.in << ", got:" << ret << std::endl;
+			}
+		}
+		else {
+			if (found != test.found || (found && (ret != test.out))) {
+				std::cerr << "Wrong result for :" << test.in << ", found:" << found << ", want:" << test.out << ", want found:" << test.found << std::endl;
+			}
+		}
+	}
 }

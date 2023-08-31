@@ -23,8 +23,7 @@ namespace bnet::beast::http {
 				}
 
 				if (0 != http_parser_parse_url(string_.data(), string_.size(), 0, std::addressof(parser_))) {
-					if (has_unencode_ch)
-					{
+					if (has_unencode_ch) {
 						string_ = url_decode(string_);
 					}
 
@@ -42,8 +41,7 @@ namespace bnet::beast::http {
 		 * @brief Gets the content of the "schema" section, maybe empty
 		 * The return value is usually http or https
 		 */
-		inline std::string_view get_schema() noexcept
-		{
+		inline std::string_view get_schema() noexcept {
 			return this->field(url_fields::UF_SCHEMA);
 		}
 
@@ -52,16 +50,14 @@ namespace bnet::beast::http {
 		 * The return value is usually http or https
 		 * same as get_schema
 		 */
-		inline std::string_view schema() noexcept
-		{
+		inline std::string_view schema() noexcept {
 			return this->get_schema();
 		}
 
 		/**
 		 * @brief Gets the content of the "host" section, maybe empty
 		 */
-		inline std::string_view get_host() noexcept
-		{
+		inline std::string_view get_host() noexcept {
 			return this->field(url_fields::UF_HOST);
 		}
 
@@ -69,13 +65,11 @@ namespace bnet::beast::http {
 		 * @brief Gets the content of the "host" section, maybe empty
 		 * same as get_host
 		 */
-		inline std::string_view host() noexcept
-		{
+		inline std::string_view host() noexcept {
 			return this->get_host();
 		}
 
-		inline std::string_view get_default_port() noexcept
-		{
+		inline std::string_view get_default_port() noexcept {
 			std::string_view schema = this->schema();
 			if (tool::str_equals(schema, "http"))
 				return std::string_view{ "80" };
@@ -84,16 +78,14 @@ namespace bnet::beast::http {
 			return std::string_view{ "80" };
 		}
 
-		inline std::string_view default_port() noexcept
-		{
+		inline std::string_view default_port() noexcept {
 			return this->get_default_port();
 		}
 
 		/**
 		 * @brief Gets the content of the "port" section
 		 */
-		inline std::string_view get_port() noexcept
-		{
+		inline std::string_view get_port() noexcept {
 			std::string_view p = this->field(url_fields::UF_PORT);
 			if (p.empty())
 				return this->default_port();
@@ -104,8 +96,7 @@ namespace bnet::beast::http {
 		 * @brief Gets the content of the "port" section
 		 * same as get_port
 		 */
-		inline std::string_view port() noexcept
-		{
+		inline std::string_view port() noexcept {
 			return this->get_port();
 		}
 
@@ -113,8 +104,7 @@ namespace bnet::beast::http {
 		 * @brief Gets the content of the "path" section
 		 * the return value maybe has undecoded char, you can use http::url_decode(...) to decoded it.
 		 */
-		inline std::string_view get_path() noexcept
-		{
+		inline std::string_view get_path() noexcept {
 			std::string_view p = this->field(url_fields::UF_PATH);
 			if (p.empty())
 				return std::string_view{ "/" };
@@ -126,8 +116,7 @@ namespace bnet::beast::http {
 		 * the return value maybe has undecoded char, you can use http::url_decode(...) to decoded it.
 		 * same as get_path
 		 */
-		inline std::string_view path() noexcept
-		{
+		inline std::string_view path() noexcept {
 			return this->get_path();
 		}
 
@@ -135,8 +124,7 @@ namespace bnet::beast::http {
 		 * @brief Gets the content of the "query" section, maybe empty
 		 * the return value maybe has undecoded char, you can use http::url_decode(...) to decoded it.
 		 */
-		inline std::string_view get_query() noexcept
-		{
+		inline std::string_view get_query() noexcept {
 			return this->field(url_fields::UF_QUERY);
 		}
 
@@ -145,8 +133,7 @@ namespace bnet::beast::http {
 		 * the return value maybe has undecoded char, you can use http::url_decode(...) to decoded it.
 		 * same as get_query
 		 */
-		inline std::string_view query() noexcept
-		{
+		inline std::string_view query() noexcept {
 			return this->get_query();
 		}
 
@@ -154,10 +141,8 @@ namespace bnet::beast::http {
 		 * @brief Gets the "target", which composed by path and query
 		 * the return value maybe has undecoded char, you can use http::url_decode(...) to decoded it.
 		 */
-		inline std::string_view get_target() noexcept
-		{
-			if (parser_.field_set & (1 << (int)url_fields::UF_PATH))
-			{
+		inline std::string_view get_target() noexcept {
+			if (parser_.field_set & (1 << (int)url_fields::UF_PATH)) {
 				return std::string_view{ &string_[
 					parser_.field_data[(int)url_fields::UF_PATH].off],
 					string_.size() -
@@ -172,16 +157,14 @@ namespace bnet::beast::http {
 		 * the return value maybe has undecoded char, you can use http::url_decode(...) to decoded it.
 		 * same as get_target
 		 */
-		inline std::string_view target() noexcept
-		{
+		inline std::string_view target() noexcept {
 			return this->get_target();
 		}
 
 		/**
 		 * @brief Gets the content of the specific section, maybe empty
 		 */
-		inline std::string_view get_field(url_fields f) noexcept
-		{
+		inline std::string_view get_field(url_fields f) noexcept {
 			if (!(parser_.field_set & (1 << int(f))))
 				return std::string_view{};
 
@@ -192,8 +175,7 @@ namespace bnet::beast::http {
 		 * @brief Gets the content of the specific section, maybe empty
 		 * same as get_field
 		 */
-		inline std::string_view field(url_fields f) noexcept
-		{
+		inline std::string_view field(url_fields f) noexcept {
 			return this->get_field(std::move(f));
 		}
 

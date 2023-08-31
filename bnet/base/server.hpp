@@ -2,7 +2,7 @@
 
 //#include <memory>
 #include <string_view>
-#include "tool/help_type.hpp"
+#include "tool/func_proxy.hpp"
 #include "tool/bytebuffer.hpp"
 #include "tool/util.hpp"
 #include "base/define.hpp"
@@ -44,7 +44,7 @@ namespace bnet::base {
 		}
 
 		~server() {
-			this->stop(ec_ignore);
+			//this->stop(ec_ignore);
 			this->iopool_.stop();
 		}
 
@@ -154,28 +154,6 @@ namespace bnet::base {
 					return std::make_shared<session_type>(this->globalval_, this->cbfunc_, cio, this->max_buffer_size_, cio.context());
 				}
 			}
-			/*
-			if constexpr (is_udp_socket_v<SOCKETTYPE>) {
-				if constexpr (is_kcp_streamtype_v<STREAMTYPE>) {
-					return std::make_shared<session_type>(this->sessions_, this->cbfunc_, this->accept_io_, this->max_buffer_size_, this->remote_endpoint_, this->accept_io_, this->acceptor_);
-				}
-				else
-					return std::make_shared<session_type>(this->sessions_, this->cbfunc_, this->cio_, this->max_buffer_size_, this->remote_endpoint_, this->acceptor_);
-			}
-			if constexpr (is_tcp_socket_v<SOCKETTYPE>) {
-				auto& cio = this->iopool_.get();
-#if defined(NET_USE_SSL)
-				if constexpr (is_ssl_streamtype_v<STREAMTYPE> || is_wss_streamtype_v<STREAMTYPE>) {
-					return std::make_shared<session_type>(this->sessions_, this->cbfunc_, cio, this->max_buffer_size_
-						, cio, *this, asio::ssl::stream_base::server, cio.context());
-				}
-#endif
-				if constexpr (is_binary_streamtype_v<STREAMTYPE> || is_ws_streamtype_v<STREAMTYPE>) {
-					return std::make_shared<session_type>(this->sessions_, this->cbfunc_, cio, this->max_buffer_size_
-						, cio.context());
-				}
-			}
-			*/
 		}
 
 		inline std::size_t session_count() { return this->globalval_.sessions_.size(); }

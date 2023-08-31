@@ -1,20 +1,5 @@
 #pragma once
 
-//#include <memory>
-//#include <future>
-//#include <string_view>
-//#include <string>
-
-//#include "base/iopool.hpp"
-//#include "base/error.hpp"
-//#include "base/session_mgr.hpp"
-//#include "base/proto.hpp"
-//#include "base/stream.hpp"
-//#include "base/timer.hpp"
-//#include "base/transfer_data.hpp"
-//#include "tool/bytebuffer.hpp"
-
-//#include <variant>
 #include "asio/experimental/awaitable_operators.hpp"
 #include "base/transfer.hpp"
 
@@ -120,7 +105,7 @@ namespace bnet::base {
 		//inline asio::streambuf& buffer() { return buffer_; }
 		inline nio& cio() { return cio_; }
 		inline auto& cbfunc() { return cbfunc_; }
-		inline t_buffer_cmdqueue<>& rbuffer() { return rbuff_; }
+		inline dynamic_buffer<>& rbuffer() { return rbuff_; }
 
 		inline bool is_started() const {
 			return (this->state_ == estate::started && this->socket().lowest_layer().is_open());
@@ -167,7 +152,7 @@ namespace bnet::base {
                     asio::detail::throw_error(asio::error::already_started);
 			    }
 
-				cbfunc_->call(event::init);
+				//cbfunc_->call(event::init);
 
                 this->ctimer_.expires_after(std::chrono::milliseconds(500));
                 std::variant<error_code, std::monostate> rets = co_await (this->template connect<IsKeepAlive>(host, port) || this->ctimer_.async_wait(asio::use_awaitable));
@@ -198,7 +183,7 @@ namespace bnet::base {
 						asio::detail::throw_error(asio::error::operation_aborted);
 					}
 				
-					cbfunc_->call(event::connect, dptr, ec_ignore);
+					cbfunc_->call(event::connect, dptr);
 
 					//if (auto ec = co_await this->recv_t(); ec) {
 					//	asio::detail::throw_error(ec);
@@ -237,7 +222,7 @@ namespace bnet::base {
 			    estate expected_started = estate::started;
 			    if (this->state_.compare_exchange_strong(expected_starting, estate::stopping) ||
 			    	this->state_.compare_exchange_strong(expected_started, estate::stopping)) {
-                    set_last_error(ec);
+                    //set_last_error(ec);
                     this->ctimer_.cancel();
                     this->user_data_reset();
 
@@ -279,8 +264,6 @@ namespace bnet::base {
                 this->host_ = host;
 			    this->port_ = port;
 
-                //std::unique_ptr<resolver_type> resolver_ptr = std::make_unique<resolver_type>(cio_.context());
-                //auto [ec, endpoints] = co_await resolver_ptr->async_resolve(host, port, asio::as_tuple(asio::use_awaitable));
 				resolver_type resolver { cio_.context() };
 				auto [ec, endpoints] = co_await resolver.async_resolve(host, port, asio::as_tuple(asio::use_awaitable));
 			    if (ec) {
@@ -325,6 +308,7 @@ namespace bnet::base {
                     }
                     auto [ec] = co_await dptr->socket().lowest_layer().async_connect(item, asio::as_tuple(asio::use_awaitable));
                     if (ec) {
+						//std::cout << "ccccccccccccc:" << ec.message() << std::endl; //如果出现错误asio::error::host_not_found，就打开这个日志看看
                         if (ec != asio::error::operation_aborted) continue;
 						co_return ec;
                     }
@@ -354,7 +338,7 @@ namespace bnet::base {
 		
 		std::atomic<estate> state_ = estate::stopped;
 
-		t_buffer_cmdqueue<> rbuff_;
+		dynamic_buffer<> rbuff_;
 
 		std::any user_data_;
 	};

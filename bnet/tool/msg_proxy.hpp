@@ -1,9 +1,5 @@
 #pragma once
 
-//#include <unordered_map>
-
-#include "help_type.hpp"
-
 namespace bnet {
 	struct check_struct_memfns_base {
 		void ParseFromArray();
@@ -69,13 +65,13 @@ namespace bnet {
 		inline void bind(F&& f, Packet&& pcg) {
 			this->fn_ = [this, fn = std::forward<F>(f), pcg = std::move(pcg)](const char* buf, std::size_t len, Args&&... args) mutable {
 				using PacketType = unqualified_t<Packet>;
-				if constexpr (is_pb_proto_v<PacketType>) { //pb 协议解析
+				if constexpr (is_pb_proto_v<PacketType>) { //pb
 					if (pcg.ParseFromArray(buf, len)) {
 						fn(pcg, std::forward<Args>(args)...);
 					}
 					return;
 				}
-				else /*if constexpr (is_struct_proto_v<PacketType>)*/ { //默认struct 协议解析
+				else /*if constexpr (is_struct_proto_v<PacketType>)*/ { // struct
 					if (len == sizeof(PacketType)) {
 						pcg = *(PacketType*)buf;
 						fn(pcg, std::forward<Args>(args)...);
@@ -90,13 +86,13 @@ namespace bnet {
 			using PacketType = unqualified_t<Packet>;
 			if constexpr (std::is_pointer_v<std::decay_t<C>> || is_shared_ptr_v<std::decay_t<C>>) {
 				this->fn_ = [this, fn = std::forward<F>(f), pcg = std::move(pcg), s = std::forward<C>(c)](const char* buf, std::size_t len, Args&&... args) mutable {
-					if constexpr (is_pb_proto_v<PacketType>) { //pb 协议解析
+					if constexpr (is_pb_proto_v<PacketType>) { //pb
 						if (pcg.ParseFromArray(buf, len)) {
 							((*s).*fn)(pcg, std::forward<Args>(args)...);
 						}
 						return;
 					}
-					else /*if constexpr (is_struct_proto_v<PacketType>)*/ { //默认struct 协议解析
+					else /*if constexpr (is_struct_proto_v<PacketType>)*/ { // struct
 						if (len == sizeof(PacketType)) {
 							pcg = *(PacketType*)buf;
 							((*s).*fn)(pcg, std::forward<Args>(args)...);
@@ -107,13 +103,13 @@ namespace bnet {
 			}
 			else {
 				this->fn_ = [this, fn = std::forward<F>(f), pcg = std::move(pcg), s = std::forward<C>(c)](const char* buf, std::size_t len, Args&&... args) mutable {
-					if constexpr (is_pb_proto_v<PacketType>) { //pb 协议解析
+					if constexpr (is_pb_proto_v<PacketType>) { //pb
 						if (pcg.ParseFromArray(buf, len)) {
 							(s.*fn)(pcg, std::forward<Args>(args)...);
 						}
 						return;
 					}
-					else /*if constexpr (is_struct_proto_v<PacketType>)*/ { //默认struct 协议解析
+					else /*if constexpr (is_struct_proto_v<PacketType>)*/ { // struct
 						if (len == sizeof(PacketType)) {
 							pcg = *(PacketType*)buf;
 							(s.*fn)(pcg, std::forward<Args>(args)...);
@@ -135,7 +131,6 @@ namespace bnet {
 		func_type fn_;
 	};
 
-	//如果绑定函数类型不支持, 自行增加相应接口.
 	template<typename IDXTYPE>
 	class msg_func_proxy_imp {
 	public:

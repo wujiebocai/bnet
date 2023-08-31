@@ -41,8 +41,8 @@ namespace bnet::base {
 		}
 
 		inline void stop(const error_code& ec) {
-			asio::co_spawn(this->cio_.context(), [this, self = self_shared_ptr()]() { 
-				return self->stop_t(ec_ignore);
+			asio::co_spawn(this->cio_.context(), [this, self = self_shared_ptr(), ec = std::move(ec)]() { 
+				return self->stop_t(ec);
 			}, asio::detached);
 		}
 
@@ -66,7 +66,7 @@ namespace bnet::base {
 		inline nio& cio() { return cio_; }
 		//inline void set_first_pack(std::string&& str) { first_pack_ = std::move(str); }
 		//inline auto& get_first_pack() { return first_pack_; }
-		inline t_buffer_cmdqueue<>& rbuffer() { return rbuff_; }
+		inline dynamic_buffer<>& rbuffer() { return rbuff_; }
 		inline auto& cbfunc() { return cbfunc_; }
 
 
@@ -117,7 +117,7 @@ namespace bnet::base {
 				if (!this->state_.compare_exchange_strong(expected, estate::started))
 					asio::detail::throw_error(asio::error::operation_aborted);
 
-				cbfunc_->call(event::connect, sptr, ec_ignore);
+				cbfunc_->call(event::connect, sptr);
 
 				//if (auto ec = co_await this->recv_t(); ec) {
 				//	asio::detail::throw_error(ec);
@@ -193,7 +193,7 @@ namespace bnet::base {
 
 		std::atomic<estate> state_ = estate::stopped;
 
-		t_buffer_cmdqueue<> rbuff_;
+		dynamic_buffer<> rbuff_;
 
 		std::any user_data_;
 

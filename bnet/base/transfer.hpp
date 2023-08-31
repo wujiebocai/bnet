@@ -89,6 +89,7 @@ namespace bnet::base {
         }
 
         inline void handle_recv(error_code ec, const std::string_view& s) {
+            std::ignore = ec;
 			this->derive_.cbfunc()->call(event::recv, this->derive_.self_shared_ptr(), std::move(s));
 		}
 
@@ -122,6 +123,7 @@ namespace bnet::base {
         inline auto& buffer() { return buffer_; }
 
         inline void handle_recv(error_code ec, const std::string_view& s) {
+            std::ignore = ec;
 			this->derive_.cbfunc()->call(event::recv, this->derive_.self_shared_ptr(), std::move(s));
 		}
     protected:
@@ -277,7 +279,7 @@ namespace bnet::base {
 
         asio::ip::udp::endpoint remote_endpoint_;
         
-        t_buffer_cmdqueue<> buffer_;
+        dynamic_buffer<> buffer_;
 		const std::size_t init_buffer_size_ = 1024;
     };
 
@@ -290,15 +292,38 @@ namespace bnet::base {
 	public:
 		transfer([[maybe_unused]] std::size_t max_buffer_size)
 			: derive_(static_cast<DriverType&>(*this))
-            , rbuff_(max_buffer_size) {}
+            , rbuff_(max_buffer_size) { }
 
 		~transfer() = default;
 
         template<class DataType>
         inline void send(DataType&& data) {
-            asio::co_spawn(this->derive_.cio().context(), [this, self = this->derive_.self_shared_ptr(), data = std::move(data)]() { 
-                return this->send_t(data);
-            }, asio::detached);
+            if constexpr (is_c_str_c<DataType>) {
+                asio::co_spawn(this->derive_.cio().context(), [this, self = this->derive_.self_shared_ptr(), data = std::string(std::move(data))]() { 
+                    return this->send_t(data);
+                }, asio::detached);
+            }
+            else {
+                asio::co_spawn(this->derive_.cio().context(), [this, self = this->derive_.self_shared_ptr(), data = std::move(data)]() { 
+                    return this->send_t(data);
+                }, asio::detached);
+            }
+		}
+
+        template<class DataType, class HandleFunc>
+        inline void send(DataType&& data, HandleFunc&& f) {
+            if constexpr (is_c_str_c<DataType>) {
+                asio::co_spawn(this->derive_.cio().context(), [this, self = this->derive_.self_shared_ptr(), data = std::string(std::move(data)), f = std::move(f)]() { 
+                    this->derive_.cli_router().handle_func(std::move(f));
+                    return this->send_t(data);
+                }, asio::detached);
+            }
+            else {
+                asio::co_spawn(this->derive_.cio().context(), [this, self = this->derive_.self_shared_ptr(), data = std::move(data), f = std::move(f)]() { 
+                    this->derive_.cli_router().handle_func(std::move(f));
+                    return this->send_t(data);
+                }, asio::detached);
+            }
 		}
 
     protected:
@@ -440,6 +465,8 @@ namespace bnet::base {
 
         inline asio::awaitable<error_code> recv_t() requires is_svr_c<SvrOrCli> {
             try {
+                set_rsp_refresh();
+
                 while (this->derive_.is_started()) {
                     // Make the request empty before reading,
 				    // otherwise the operation behavior is undefined.
@@ -456,11 +483,12 @@ namespace bnet::base {
                         
                     rep_.result(http::status::unknown);
 				    rep_.keep_alive(req_.keep_alive());
-
-                    auto ret = co_await this->handle_recv_s();
-                    if (ret == 0) {
-                        std::cout << "http handle request fail:" << req_.target() << std::endl;
-                    }
+                    
+                    co_await this->handle_recv_s();
+                    //auto ret = co_await this->handle_recv_s();
+                    //if (ret == 0) {
+                    //    std::cout << "http handle request fail:" << req_.target() << std::endl;
+                    //}
                 }
             }
             catch (system_error& e) {
@@ -476,16 +504,17 @@ namespace bnet::base {
                 while (this->derive_.is_started()) {
                     // Make the request empty before reading,
 				    // otherwise the operation behavior is undefined.
-				    this->req_.reset();
+				    this->rep_.reset();
 
                     auto [ec, nrecv] = co_await http::async_read(this->derive_.socket(), rbuff_, rep_,
                                             asio::as_tuple(asio::use_awaitable));
+                    
+                    // 路由
+                    this->handle_recv_c(ec);
+
                     if (ec) {
                         co_return ec;
                     }
-
-                    // 路由
-                    this->handle_recv_c();
                 }
             }
             catch (system_error& e) {
@@ -496,7 +525,7 @@ namespace bnet::base {
             co_return ec_ignore;
 		}
 
-        inline asio::awaitable<std::size_t> handle_recv_s() {
+        inline asio::awaitable<void> handle_recv_s() {
             std::string path(this->req_.path());
             auto method = this->req_.method();
             auto ret = this->derive_.globalval().handle(method, path);
@@ -506,17 +535,28 @@ namespace bnet::base {
             }
             else {
                 this->derive_.fill_route_fail(req_, rep_);
+                co_await this->send_t(rep_);
             }
-
-            co_return co_await this->send_t(rep_);
+            co_return;
 		}
 
-        inline void handle_recv_c() {
+        inline void handle_recv_c(const error_code& ec) {
             //this->derive_.cbfunc()->call(event::recv, this->derive_.self_shared_ptr(), req_, rep_);
-            auto func = this->derive_.cli_router().handle();
-            if (func) {
-                func(req_, rep_);
-            }
+            //auto func = this->derive_.cli_router().handle();
+            //if (func) {
+            //    func(req_, rep_);
+            //}
+            this->derive_.cli_router().handle(ec, rep_);
+        }
+
+        inline void set_rsp_refresh() {
+            std::weak_ptr<DriverType> wptr = this->derive_.self_shared_ptr();
+            rep_.refresh([wptr] (const http::web_response& rep) mutable {
+                auto sptr = wptr.lock();
+                if (sptr) {
+                    sptr->send(rep);
+                }
+            });
         }
 
     protected:
@@ -658,6 +698,7 @@ namespace bnet::base {
 		}
 
         inline void handle_recv(error_code ec, const std::string_view& s) {
+            std::ignore = ec;
 			this->derive_.cbfunc()->call(event::recv, this->derive_.self_shared_ptr(), std::move(s));
 		}
 
@@ -817,7 +858,7 @@ namespace bnet::base {
     protected:
         DriverType& derive_;
         
-        t_buffer_cmdqueue<> buffer_;
+        dynamic_buffer<> buffer_;
 		const std::size_t init_buffer_size_ = 1024;
     };
 }

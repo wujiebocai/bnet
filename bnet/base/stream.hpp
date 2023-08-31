@@ -1,12 +1,7 @@
 #pragma once
 
-//#include <memory>
 #include "base/socket.hpp"
 #include "kcp_util.hpp"
-//#include "base/iopool.hpp"
-//#include "base/error.hpp"
-//#include "base/timer.hpp"
-//#include "opt/kcp/kcp_util.hpp"
 
 namespace bnet::base {
 	template<class ... Args>
@@ -64,7 +59,7 @@ namespace bnet::base {
 
 	public:
 		template<class ...Args>
-		explicit ssl_stream(nio& io, handshake_type type, Args&&... args)
+		explicit ssl_stream([[maybe_unused]] nio& io, handshake_type type, Args&&... args)
 			: SocketType(std::forward<Args>(args)...)
 			, ssl_type_(type)
 			//, ssl_io_(io)
@@ -77,13 +72,13 @@ namespace bnet::base {
 		template<class SessionPtr>
 		inline asio::awaitable<error_code> stream_start(SessionPtr&& ptr) {
 			auto [ec] = co_await this->socket().async_handshake(ssl_type_, asio::as_tuple(asio::use_awaitable));
-			if (ec) {
-				co_return ec;
-			}
+			//if (ec) {
+			//	co_return ec;
+			//}
 
-			ptr->cbfunc()->call(event::handshake, ptr, ec_ignore);
+			ptr->cbfunc()->call(event::handshake, ptr, ec);
 
-			co_return ec_ignore;
+			co_return ec;
 		}
 
 		template<class SessionPtr>
@@ -584,8 +579,8 @@ namespace bnet::base {
 		}
 
 		template<class SessionPtr> 
-		inline void handle_handshake(SessionPtr&& ptr) {
-			ptr->cbfunc()->call(event::handshake, ptr, ec_ignore);
+		inline void handle_handshake(SessionPtr&& ptr, error_code ec) {
+			ptr->cbfunc()->call(event::handshake, ptr, ec);
 		}
 
 		template<class SessionPtr>
@@ -608,13 +603,13 @@ namespace bnet::base {
 			this->kcp_send_synack_t(syn, ec);
 
 			if (ec) {
-				this->handle_handshake(ptr);
+				this->handle_handshake(ptr, ec);
 				co_return ec;
 			}
 
 			co_await this->kcp_start_t(ptr, conv);
 
-			this->handle_handshake(ptr);
+			this->handle_handshake(ptr, ec_ignore);
 			co_return ec_ignore;
 		}
 
@@ -663,7 +658,7 @@ namespace bnet::base {
 				// if connect_timeout_timer_ is empty, it means that the connect timeout timer is
 				// timeout and the callback has called already, so reset the error to timed_out.
 				// note : when the async_resolve is failed, the socket is invalid to.
-				this->handle_handshake(ptr);
+				this->handle_handshake(ptr, rcvec);
                 co_return rcvec; //asio::error::timed_out;
             }
 
@@ -679,11 +674,11 @@ namespace bnet::base {
 					NET_ASSERT(derive.kcp_conv_ == conv);
 				}
 				co_await this->kcp_start_t(ptr, conv);
-				this->handle_handshake(ptr);
+				this->handle_handshake(ptr, ec_ignore);
 				co_return ec_ignore;
 			}
 			else {
-				this->handle_handshake(ptr);
+				this->handle_handshake(ptr, asio::error::address_family_not_supported);
 				co_return asio::error::address_family_not_supported;
 			}
 		}

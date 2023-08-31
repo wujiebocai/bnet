@@ -53,11 +53,12 @@ namespace bnet::beast::http {
 		}
 
 		http_response_impl_t(const http_response_impl_t& o)
-			: super()
+			: super(o.base())
 		{
-			this->base() = o.base();
+			//this->base() = o.base();
 			this->root_directory_ = o.root_directory_;
 			this->defer_callback_ = o.defer_callback_;
+			this->refresh_func_ = o.refresh_func_;
 			this->defer_guard_    = o.defer_guard_;
 			this->session_ptr_    = o.session_ptr_;
 		}
@@ -68,6 +69,7 @@ namespace bnet::beast::http {
 			this->base() = std::move(o.base());
 			this->root_directory_ = o.root_directory_;
 			this->defer_callback_ = o.defer_callback_;
+			this->refresh_func_ = o.refresh_func_;
 			this->defer_guard_    = o.defer_guard_;
 			this->session_ptr_    = o.session_ptr_;
 		}
@@ -77,6 +79,7 @@ namespace bnet::beast::http {
 			this->base() = o.base();
 			this->root_directory_ = o.root_directory_;
 			this->defer_callback_ = o.defer_callback_;
+			this->refresh_func_ = o.refresh_func_;
 			this->defer_guard_    = o.defer_guard_;
 			this->session_ptr_    = o.session_ptr_;
 			return *this;
@@ -87,6 +90,7 @@ namespace bnet::beast::http {
 			this->base() = std::move(o.base());
 			this->root_directory_ = o.root_directory_;
 			this->defer_callback_ = o.defer_callback_;
+			this->refresh_func_ = o.refresh_func_;
 			this->defer_guard_    = o.defer_guard_;
 			this->session_ptr_    = o.session_ptr_;
 			return *this;
@@ -358,10 +362,20 @@ namespace bnet::beast::http {
 			return this->get_multipart();
 		}
 
+		template<typename Func>
+		inline void refresh(Func&& f) { this->refresh_func_ = f; }
+		inline void refresh() {
+			if (refresh_func_) {
+				refresh_func_(*this);
+			}
+		}
+
 	protected:
 		std::filesystem::path                    root_directory_     = std::filesystem::current_path();
 
 		std::function<void()>                    defer_callback_;
+
+		std::function<void(const self& rep)>	 refresh_func_;
 
 		std::shared_ptr<response_defer>    defer_guard_;
 

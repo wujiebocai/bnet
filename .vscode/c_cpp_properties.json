@@ -9,7 +9,10 @@
             "compilerPath": "/usr/bin/gcc",
             "cStandard": "c17",
             "cppStandard": "gnu++20",
-            "intelliSenseMode": "linux-gcc-x64"
+            "intelliSenseMode": "linux-gcc-x64",
+            "compilerArgs": [
+                "-DNET_USE_HTTP=ON, -DNET_USE_SSL=ON"
+            ]
         }
     ],
     "version": 4

@@ -1,9 +1,5 @@
 #pragma once
 
-//#include <memory>
-//#include <future>
-//#include <string_view>
-
 #include "base/csession.hpp"
 
 namespace bnet::base {
@@ -36,7 +32,7 @@ namespace bnet::base {
 		}
 
 		~client() {
-			this->stop(ec_ignore);
+			//this->stop(ec_ignore);
 			this->iopool_.stop();
 		}
 
@@ -78,18 +74,14 @@ namespace bnet::base {
 		inline void stop(const error_code& ec) {
 			estate expected = estate::starting;
 			if (this->state_.compare_exchange_strong(expected, estate::stopping))
-				asio::co_spawn(this->cio_.context(), [this/*, self = self_shared_ptr()*/, ec = std::move(ec)]() { 
-				    return this->stop_t(ec);
-			    }, asio::detached);
+				return this->stop_t(ec);
 
 			expected = estate::started;
 			if (this->state_.compare_exchange_strong(expected, estate::stopping))
-				asio::co_spawn(this->cio_.context(), [this/*, self = self_shared_ptr()*/, ec = std::move(ec)]() { 
-				    return this->stop_t(ec);
-			    }, asio::detached);
+				return this->stop_t(ec);
 		}
 
-        inline asio::awaitable<void> stop_t(const error_code& ec) {
+        inline void stop_t(const error_code& ec) {
             set_last_error(ec);
 
             this->globalval_.sessions_.foreach([this, ec](session_ptr_type& session_ptr) {
@@ -103,7 +95,7 @@ namespace bnet::base {
 			else
 				NET_ASSERT(false);
 
-            co_return;
+            return;
         }
 
 		inline session_ptr_type make_session() {
@@ -114,15 +106,6 @@ namespace bnet::base {
 					, cio, asio::ssl::stream_base::client, cio.context(), *this);
 			}
 #endif
-/*
-			if constexpr (is_binary_streamtype_v<STREAMTYPE> || is_ws_streamtype_v<STREAMTYPE>) {
-				return std::make_shared<session_type>(this->sessions_, this->cbfunc_, cio, this->max_buffer_size_
-					, cio.context());
-			}
-			if constexpr (is_kcp_streamtype_v<STREAMTYPE>) {
-				return std::make_shared<session_type>(this->sessions_, this->cbfunc_, cio, this->max_buffer_size_, cio, cio.context());
-			}
-*/
 			if constexpr (is_binary_stream<StreamType> || is_kcp_stream<StreamType>) {
             	return std::make_shared<session_type>(this->globalval_, this->cbfunc_, cio, this->max_buffer_size_, cio.context());
 			}

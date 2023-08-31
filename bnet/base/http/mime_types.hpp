@@ -7,13 +7,10 @@
 #include <string_view>
 
 namespace bnet::beast::http {
-	namespace
-	{
+	namespace {
 		template<typename = void>
-		std::string_view mimetype_to_extension(std::string_view mime_type)
-		{
-			static std::unordered_map<std::string_view, std::string_view> mime_map =
-			{
+		std::string_view mimetype_to_extension(std::string_view mime_type) {
+			static std::unordered_map<std::string_view, std::string_view> mime_map = {
 				/* Generated from an OSX-provided mime.types, massaged somewhat by hand */
 				{ "application/andrew-inset", "ez" },
 				{ "application/applixware", "aw" },
@@ -1426,8 +1423,7 @@ namespace bnet::beast::http {
 
 			std::string_view base_type(extension);
 			std::string_view::size_type semicolon_pos = base_type.find_first_of(".");
-			if (semicolon_pos != std::string_view::npos)
-			{
+			if (semicolon_pos != std::string_view::npos) {
 				base_type = base_type.substr(semicolon_pos + 1);
 			}
 

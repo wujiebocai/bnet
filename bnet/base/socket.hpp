@@ -1,11 +1,8 @@
 #pragma once
 
-//#include <string>
 #if defined(_WIN32) || defined(_WIN64) || defined(_WINDOWS_) || defined(WIN32)
 #include <Mstcpip.h> // tcp_keepalive struct
 #endif
-
-//#include "base/error.hpp"
 
 namespace bnet::base {
 	// SocketType : tcp or udp or websocket

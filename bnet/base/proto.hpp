@@ -30,7 +30,7 @@ namespace bnet::base {
 	class proto {
 	public:
 		template<class ... FArgs>
-		explicit proto(FArgs&&... args) {}
+		explicit proto([[maybe_unused]] FArgs&&... args) {}
 	};
 
 #if defined(NET_USE_HTTP)
@@ -38,7 +38,7 @@ namespace bnet::base {
 	class http_proto : public http_tag {
 	public:
 		template<class ... FArgs>
-		explicit http_proto(FArgs&&... args) {}
+		explicit http_proto([[maybe_unused]] FArgs&&... args) {}
 
 		void fill_route_fail(http::web_request&	req, http::web_response& rep) {
 			std::string desc;
@@ -202,12 +202,18 @@ namespace bnet::base {
 
 		template<class SessionPtr>
 		inline void handle_control_ping(std::string_view payload, SessionPtr&& ptr) {
+			std::ignore = payload;
+			std::ignore = ptr;
 		}
 		template<class SessionPtr>
 		inline void handle_control_pong(std::string_view payload, SessionPtr&& ptr) {
+			std::ignore = payload;
+			std::ignore = ptr;
 		}
 		template<class SessionPtr>
 		inline void handle_control_close(std::string_view payload, SessionPtr&& ptr) {
+			std::ignore = payload;
+			std::ignore = ptr;
 			//derived_t& derive = static_cast<derived_t&>(*this);
 
 			//detail::ignore_unused(payload, this_ptr, ecs);

@@ -63,8 +63,8 @@ namespace bnet::base {
 				}
 
 				auto executor = co_await asio::this_coro::executor;
-                asio::co_spawn(executor, [this/*, self = this->server_.self_shared_ptr()*/, host, port]() { 
-					return this->acceptor_start_t(host, port); 
+                asio::co_spawn(executor, [this/*, self = this->server_.self_shared_ptr()*/]() { 
+					return this->acceptor_start_t(); 
 				}, asio::detached);
 			}
 			catch (system_error & e) {
@@ -81,7 +81,7 @@ namespace bnet::base {
         }
 
     protected:
-		inline asio::awaitable<void> acceptor_start_t(std::string_view host, std::string_view port) {
+		inline asio::awaitable<void> acceptor_start_t() {
 			try {
             	while (this->is_open()) {
 					auto session_ptr = this->server_.make_session();
@@ -194,8 +194,8 @@ namespace bnet::base {
 				}
 
 				auto executor = co_await asio::this_coro::executor;
-                asio::co_spawn(executor, [this/*, self = this->server_.self_shared_ptr()*/, host, port]() { 
-					return this->acceptor_start_t(host, port); 
+                asio::co_spawn(executor, [this/*, self = this->server_.self_shared_ptr()*/]() { 
+					return this->acceptor_start_t(); 
 				}, asio::detached);
 			}
 			catch (system_error& e) {
@@ -210,9 +210,9 @@ namespace bnet::base {
 			this->acceptor_stop_t();
 		}
 	protected:
-		inline asio::awaitable<void> acceptor_start_t(std::string_view host, std::string_view port) { 
+		inline asio::awaitable<void> acceptor_start_t() { 
 			try {
-				t_static_cmdqueue<1024> buffer;
+				static_buffer<1024> buffer;
 				asio::ip::udp::endpoint remote_endpoint;
 				while (this->is_open()) {
 					//buffer.reset();

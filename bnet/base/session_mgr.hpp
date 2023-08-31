@@ -1,15 +1,6 @@
 #pragma once
 
-//#include <algorithm>
-//#include <mutex>
-//#include <memory>
 #include <shared_mutex>
-//#include <unordered_map>
-//#include <memory>
-//#include <functional>
-//#include <type_traits>
-
-//#include "base/iopool.hpp"
 
 namespace bnet::base {
 	template<class SessionType>
@@ -93,6 +84,10 @@ namespace bnet::base {
 		}
 
 		inline session_ptr rand_get() {
+			if (sessions_.size() <= 0) {
+				return session_ptr();
+			}
+			
 			std::random_device rd;
     		std::mt19937 gen(rd());
 

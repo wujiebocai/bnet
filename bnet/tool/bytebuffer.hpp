@@ -1,111 +1,99 @@
 #pragma once
 
-//#include <vector>
-//#include <string>
-//#include <cstring>
-//#include <assert.h>
-
 #include "tool/noncopyable.hpp"
 
 namespace bnet {
-	/// 默认内存块单位大小
-	const unsigned int trunkSize = 64 * 1024;
-	/// 根据size计算内存块数量
-	/// size 大小
+	/// default block size
+	constexpr unsigned int trunkSize = 64 * 1024;
+	/// calculate the number of memory blocks based on size
+	/// size
 #define trunkCount(size, trunklen) (((size) + trunklen - 1) / trunklen)
 
-	// check缓存是否可以动态扩充
 	template<typename T>
-	struct buffer_is_dynamic {
-	private:
-		template<typename U>
-		static auto check(bool) -> decltype(std::declval<U>().resize(std::size_t(0)), std::true_type());
-		template<typename U>
-		static std::false_type check(...);
-	public:
-		static constexpr bool value = std::is_same_v<decltype(check<T>(true)), std::true_type>;
+	concept buffer_is_dynamic = requires(T t) {
+		{ t.resize(std::size_t(0)) };
 	};
 
-	template <typename _type, unsigned int trunklen, bool isdynamic = buffer_is_dynamic<_type>::value>
+	template <typename btype, unsigned int trunklen, bool isdynamic = buffer_is_dynamic<btype>>
 	class bytebuffer;
 
-	template <typename _type, unsigned int trunklen>
-	class bytebuffer<_type, trunklen, true> {
+	template <typename btype, unsigned int trunklen>
+	class bytebuffer<btype, trunklen, true> {
 	public:
 		bytebuffer()
-			: _maxSize(trunklen)
-			, _offPtr(0)
-			, _currPtr(0)
-			, _buffer(_maxSize)
+			: max_size_(trunklen)
+			, offptr_(0)
+			, currptr_(0)
+			, buffer_(max_size_)
 		{
 		}
 		//bytebuffer(const bytebuffer&);
 
 		inline void wr_reserve(const unsigned int size) {
 			if (wr_size() < size + 8) {
-				_maxSize += (trunklen * trunkCount(size + 8, trunklen));
-				_buffer.resize(_maxSize);
+				max_size_ += (trunklen * trunkCount(size + 8, trunklen));
+				buffer_.resize(max_size_);
 			}
 		}
 
 		inline void put(const char *buf, const unsigned int size) {
 			wr_reserve(size);
-			std::memmove(&_buffer[_currPtr], buf, size);
-			_currPtr += size;
+			std::memmove(&buffer_[currptr_], buf, size);
+			currptr_ += size;
 		}
 
 		inline char *wr_buf() {
-			return &_buffer[_currPtr];
+			return &buffer_[currptr_];
 		}
 
 		inline const char *rd_buf() const {
-			return &_buffer[_offPtr];
+			return &buffer_[offptr_];
 		}
 
 		inline bool rd_ready() const {
-			return _currPtr > _offPtr;
+			return currptr_ > offptr_;
 		}
 
 		inline unsigned int rd_size() const {
-			return _currPtr - _offPtr;
+			return currptr_ - offptr_;
 		}
 
 		inline void rd_flip(unsigned int size) {
-			_offPtr += size;
-			if (_currPtr > _offPtr) {
-				unsigned int tmp = _currPtr - _offPtr;
-				if (_offPtr >= tmp) {
-					std::memmove(&_buffer[0], &_buffer[_offPtr], tmp);
-					_offPtr = 0;
-					_currPtr = tmp;
+			offptr_ += size;
+			if (currptr_ > offptr_) {
+				unsigned int tmp = currptr_ - offptr_;
+				if (offptr_ >= tmp) {
+					std::memmove(&buffer_[0], &buffer_[offptr_], tmp);
+					offptr_ = 0;
+					currptr_ = tmp;
 				}
 			}
 			else {
-				_offPtr = 0;
-				_currPtr = 0;
+				offptr_ = 0;
+				currptr_ = 0;
 			}
 		}
 
 		inline unsigned int wr_size() const {
-			return _maxSize - _currPtr;
+			return max_size_ - currptr_;
 		}
 
 		inline void wr_flip(const unsigned int size) {
-			_currPtr += size;
+			currptr_ += size;
 		}
 
 		inline void reset() {
-			_offPtr = 0;
-			_currPtr = 0;
+			offptr_ = 0;
+			currptr_ = 0;
 		}
 
 		inline unsigned int maxSize() const {
-			return _maxSize;
+			return max_size_;
 		}
 
 		inline bool is_range(void* pointer) {
-			auto beginaddr = &_buffer[0];
-			auto endaddr = &_buffer[_maxSize];
+			auto beginaddr = &buffer_[0];
+			auto endaddr = &buffer_[max_size_];
 			if (pointer >= beginaddr && pointer <= endaddr) {
 				return true;
 			}
@@ -113,90 +101,89 @@ namespace bnet {
 		}
 
 	private:
-		unsigned int _maxSize;
-		unsigned int _offPtr;
-		unsigned int _currPtr;
-		/// 缓冲区
-		_type _buffer;
+		unsigned int max_size_;
+		unsigned int offptr_;
+		unsigned int currptr_;
+		
+		btype buffer_;
 	};
 
-	template <typename _type, unsigned int trunklen>
-	class bytebuffer<_type, trunklen, false> {
+	template <typename btype, unsigned int trunklen>
+	class bytebuffer<btype, trunklen, false> {
 	public:
 		bytebuffer()
-			: _maxSize(trunklen)
-			, _offPtr(0)
-			, _currPtr(0)
+			: max_size_(trunklen)
+			, offptr_(0)
+			, currptr_(0)
 		{
-			std::memset(_buffer, 0, sizeof(_buffer));
+			std::memset(buffer_, 0, sizeof(buffer_));
 		}
 		//bytebuffer(const bytebuffer&);
 
 		inline void wr_reserve(const unsigned int size) {
-			//静态缓存不能扩充
-			//如果需求的静态缓冲大小小于需求的缓冲大小，肯定会导致栈溢出
-			//这里直接退出运行是最安全的做法
+			//static cache cannot be extended
+			
 			assert(wr_size() >= size);
 		}
 
 		inline void put(const char *buf, const unsigned int size) {
 			wr_reserve(size);
-			std::memmove(&_buffer[_currPtr], buf, size);
-			_currPtr += size;
+			std::memmove(&buffer_[currptr_], buf, size);
+			currptr_ += size;
 		}
 
 		inline char *wr_buf() {
-			return &_buffer[_currPtr];
+			return &buffer_[currptr_];
 		}
 
 		inline const char *rd_buf() const {
-			return &_buffer[_offPtr];
+			return &buffer_[offptr_];
 		}
 
 		inline bool rd_ready() const {
-			return _currPtr > _offPtr;
+			return currptr_ > offptr_;
 		}
 
 		inline unsigned int rd_size() const {
-			return _currPtr - _offPtr;
+			return currptr_ - offptr_;
 		}
 
 		inline void rd_flip(unsigned int size) {
-			_offPtr += size;
-			if (_currPtr > _offPtr) {
-				unsigned int tmp = _currPtr - _offPtr;
-				if (_offPtr >= tmp) {
-					std::memmove(&_buffer[0], &_buffer[_offPtr], tmp);
-					_offPtr = 0;
-					_currPtr = tmp;
+			offptr_ += size;
+			if (currptr_ > offptr_) {
+				unsigned int tmp = currptr_ - offptr_;
+				if (offptr_ >= tmp) {
+					std::memmove(&buffer_[0], &buffer_[offptr_], tmp);
+					offptr_ = 0;
+					currptr_ = tmp;
 				}
 			}
 			else {
-				_offPtr = 0;
-				_currPtr = 0;
+				offptr_ = 0;
+				currptr_ = 0;
 			}
 		}
 
 		inline unsigned int wr_size() const {
-			return _maxSize - _currPtr;
+			return max_size_ - currptr_;
 		}
 
 		inline void wr_flip(const unsigned int size) {
-			_currPtr += size;
+			currptr_ += size;
 		}
 
 		inline void reset() {
-			_offPtr = 0;
-			_currPtr = 0;
+			offptr_ = 0;
+			currptr_ = 0;
 		}
 
 		inline unsigned int maxSize() const {
-			return _maxSize;
+			return max_size_;
 		}
 
 		inline bool is_range(void* pointer) {
-			auto beginaddr = &_buffer[0];
-			auto endaddr = &_buffer[_maxSize];
+			auto beginaddr = &buffer_[0];
+			auto endaddr = &buffer_[max_size_];
 			if (pointer >= beginaddr && pointer <= endaddr) {
 				return true;
 			}
@@ -204,39 +191,37 @@ namespace bnet {
 		}
 
 	private:
-		unsigned int _maxSize;
-		unsigned int _offPtr;
-		unsigned int _currPtr;
-		/// 缓冲区
-		_type _buffer;
+		unsigned int max_size_;
+		unsigned int offptr_;
+		unsigned int currptr_;
+		
+		btype buffer_;
 	};
 
-	// 动态内存的缓冲区，可以动态扩展缓冲区大小
 	template<unsigned int trunklen = trunkSize>
-	class t_buffer_cmdqueue : public bytebuffer<std::vector<char >, trunklen>
+	class dynamic_buffer : public bytebuffer<std::vector<char>, trunklen>
 							, private noncopyable {
 	public:
-		using super = bytebuffer<std::vector<char >, trunklen>;
-		t_buffer_cmdqueue() : super() {
+		using super = bytebuffer<std::vector<char>, trunklen>;
+		dynamic_buffer() : super() {
 		}
-		~t_buffer_cmdqueue() = default;
+		~dynamic_buffer() = default;
 
-		t_buffer_cmdqueue(const t_buffer_cmdqueue& allm) = delete;
-		t_buffer_cmdqueue& operator=(const t_buffer_cmdqueue&) = delete;
+		dynamic_buffer(const dynamic_buffer& allm) = delete;
+		dynamic_buffer& operator=(const dynamic_buffer&) = delete;
 	};
 
-	// 	以栈空间数组的方式来分配内存,用于一些临时变量的获取
 	template<unsigned int trunklen = trunkSize>
-	class t_static_cmdqueue : public bytebuffer<char[trunklen], trunklen>
+	class static_buffer : public bytebuffer<char[trunklen], trunklen>
 							, private noncopyable {
 	public:
 		using super = bytebuffer<char[trunklen], trunklen>;
-		t_static_cmdqueue() : super() {
+		static_buffer() : super() {
 		}
-		~t_static_cmdqueue() = default;
+		~static_buffer() = default;
 
-		t_static_cmdqueue(const t_static_cmdqueue& allm) = delete;
-		t_static_cmdqueue& operator=(const t_static_cmdqueue&) = delete;
+		static_buffer(const static_buffer& allm) = delete;
+		static_buffer& operator=(const static_buffer&) = delete;
 	};
 }
 

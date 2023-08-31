@@ -13,19 +13,34 @@ public:
 	http_svr_proxy(std::size_t concurrency = std::thread::hardware_concurrency() * 2, std::size_t max_buffer_size = (std::numeric_limits<std::size_t>::max)())
 		: SvrType(concurrency, max_buffer_size) {
 
-		this->bind(base::event::connect, [](session_ptr_type& ptr, error_code ec) {
-			std::cout << "http connect" << ec.message() << std::endl;
+		this->bind(event::connect, []([[maybe_unused]] session_ptr_type& ptr) {
+			std::cout << "http connect success" << std::endl;
 		});
-		this->bind(base::event::handshake, [](session_ptr_type& ptr, error_code ec) {
+		this->bind(event::handshake, []([[maybe_unused]] session_ptr_type& ptr, error_code ec) {
 			std::cout << "http handshake" << ec.message() << std::endl;
 		});
-		this->bind(base::event::disconnect, [](session_ptr_type& ptr, error_code ec) {
+		this->bind(event::disconnect, []([[maybe_unused]] session_ptr_type& ptr, error_code ec) {
 			std::cout << "http disconnect" << ec.message() << std::endl;
 		});
 	
-		this->get("/api/user/tt", [](http::web_request& req, http::web_response& rep) {
-			std::cout << "server: " << req << std::endl;
-			rep.fill_text("the user name is hanmeimei, .....");
+		this->get("/api/user/tt", []([[maybe_unused]] http::web_request& req, http::web_response& rep) {
+			//std::cout << "server: " << req << std::endl;
+
+			[[maybe_unused]] auto& rep3 = rep;
+			[[maybe_unused]] auto rep2 = std::move(rep);
+			auto rep1 = rep;
+			rep1.fill_text("the user name is hanmeimei, .....");
+			rep1.refresh();
+
+			//http::file_body::value_type aa;
+			//auto a = aa;
+			
+			//http::message<false, http::string_body, http::fields> ss;
+			//auto s = ss;
+			//http::flex_body ff;
+			//auto f = ff;
+			//http::web_response ss;
+			//auto s = ss;
 		});
 	}
 
@@ -43,32 +58,31 @@ public:
 	http_cli_proxy(std::size_t concurrency = std::thread::hardware_concurrency() * 2, std::size_t max_buffer_size = (std::numeric_limits<std::size_t>::max)())
 		: CliType(concurrency, max_buffer_size) {
 
-		this->bind(base::event::connect, [](session_ptr_type& ptr, error_code ec) {
-			if (!ec) {
-				//const char* msg = "GET /api/user/tt HTTP/1.1\r\n\r\n";
-				//ptr->send(msg);
-				//ptr->send("GET /api/user/tt HTTP/1.1\r\n\r\n"); //这种方式有问题，应该是字面量传递进去，不知道边界了
-				ptr->send(std::string("GET /api/user/tt HTTP/1.1\r\n\r\n"));
+		this->bind(event::connect, []([[maybe_unused]] session_ptr_type& ptr) {
+			//const char* msg = "GET /api/user/tt HTTP/1.1\r\n\r\n";
+			//ptr->send(msg);
+			//ptr->send("GET /api/user/tt HTTP/1.1\r\n\r\n");
+			//ptr->send(std::string("GET /sss HTTP/1.1\r\n\r\n"));
 				
-				/*
-				base::http::web_request req;
-				req.method(beast::http::verb::get);
-				req.keep_alive(true);
-				req.target("/del_user");
-				req.body() = "Hello, world!";
-				req.prepare_payload();
-				ptr->send(req.base());
-				*/
-			}
-			std::cout << "http connect client" << ec.message() << std::endl;
+			/*
+			base::http::web_request req;
+			req.method(beast::http::verb::get);
+			req.keep_alive(true);
+			req.target("/del_user");
+			req.body() = "Hello, world!";
+			req.prepare_payload();
+			ptr->send(req.base());
+			*/
+			std::cout << "http connect client success" << std::endl;
 		});
-		this->bind(base::event::handshake, [](session_ptr_type& ptr, error_code ec) {
+		this->bind(event::handshake, []([[maybe_unused]]session_ptr_type& ptr, error_code ec) {
 			std::cout << "http handshake client" << ec.message() << std::endl;
 		});
-		this->bind(base::event::disconnect, [](session_ptr_type& ptr, error_code ec) {
+		this->bind(event::disconnect, []([[maybe_unused]]session_ptr_type& ptr, error_code ec) {
 			std::cout << "http disconnect client" << ec.message() << std::endl;
 		});
-		this->bind(base::event::recv, [](session_ptr_type& ptr, http::web_request& req, http::web_response& rep) {
+		this->bind(event::recv, []([[maybe_unused]]session_ptr_type& ptr, http::web_request& req, http::web_response& rep) {
+			std::ignore = req;
 			// print the whole response
 			std::cout << rep << std::endl;
 			// print the response body

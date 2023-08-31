@@ -8,7 +8,6 @@ namespace bnet::base {
         session_mgr<SessionType> sessions_;
 
 #if defined(NET_USE_HTTP)
-        //using session_ptr_type = SessionType::session_ptr_type;
         using handle_func_type = typename http::http_router::handle_func_type;
         
         http::http_router router_;

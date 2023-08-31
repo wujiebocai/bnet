@@ -25,6 +25,8 @@ option(COMPILE_PROTOBUF "Compile protobuf" OFF)
 add_definitions(-DASIO_STANDALONE)
 add_definitions(-DASIO_NO_DEPRECATED)
 add_definitions(-DUSE_OPENSSL)
+add_definitions(-DNET_USE_SSL)
+add_definitions(-DNET_USE_HTTP)
 #add_definitions(-D_SILENCE_CXX17_ALLOCATOR_VOID_DEPRECATION_WARNING)
 
 # platform

@@ -389,10 +389,13 @@ namespace bnet::tool {
         return (s.size() >= suffix.size() && s.substr(s.size() - suffix.size()) == suffix);
     }
 
-    // 分割
-	// count == 0 返回nil
-	// count > 0 返回count个字串
-	// count < 0 全部分割字符串
+	/**
+	 * @brief Split string
+	 * @param s - input string that will be splited.
+	 * @param delimiters - delimiters.
+	 * @param count - == 0 no split, > 0 split to count, < 0 split the whole string.
+	 * @return Converted value as std::string_view.
+	 */
  	template<class String, class Delimiter>
 	inline std::vector<String> split(const String& s, const Delimiter& delimiters = " ", int count = -1) {
 		using size_type = typename String::size_type;
