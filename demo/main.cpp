@@ -1,7 +1,7 @@
 #include <iostream> 
 #include "bnet.hpp"
 #include "other.hpp"
-#include "http.hpp"
+#include "httptmp.hpp"
 #include <regex>
 #include "tree_tst.hpp"
 
@@ -140,16 +140,16 @@ public:
 };
 
 void tcp_tst() {
-#if 0
+#if 1
 	// svr
 	static auto tcpsvr = svr_proxy<tcp_svr>(8);
 	tcpsvr.start("0.0.0.0", "8585");
     tcpsvr.test_timer();
-	std::this_thread::sleep_for(std::chrono::milliseconds(2000));
+	//std::this_thread::sleep_for(std::chrono::milliseconds(2000));
     //cli
     static auto tcpcli = cli_proxy<tcp_cli>(5);
     tcpcli.start();
-    for (int i = 0; i < 5000; ++i) {
+    for (int i = 0; i < 44; ++i) {
         tcpcli.add("192.168.152.62", "8585");
     }
 	//std::this_thread::sleep_for(std::chrono::milliseconds(2000));
@@ -157,7 +157,7 @@ void tcp_tst() {
 }
 
 void udp_tst() {
-#if 0
+#if 1
 	// svr
 	static auto udp_svr_ptr = std::make_shared<svr_proxy<udp_svr>>(8);
 	udp_svr_ptr->start("0.0.0.0", "8585");
@@ -172,7 +172,7 @@ void udp_tst() {
 }
 
 void kcp_tst() {
-#if 0
+#if 1
 	// svr
 	static auto kcp_svr_ptr = std::make_shared<svr_proxy<kcp_svr>>(8);
 	kcp_svr_ptr->start("0.0.0.0", "8585");
@@ -180,7 +180,7 @@ void kcp_tst() {
     //cli
     static auto kcp_cli_ptr = std::make_shared<cli_proxy<kcp_cli>>(5);
     kcp_cli_ptr->start();
-    for (int i = 0; i < 5000; ++i) {
+    for (int i = 0; i < 44; ++i) {
         kcp_cli_ptr->add("127.0.0.1", "8585");
     }
 #endif
@@ -188,7 +188,7 @@ void kcp_tst() {
 
 std::atomic<std::size_t> httpcount{ 0 };
 void http_tst() {
-#if defined(NET_USE_HTTP)
+#if defined(BNET_ENABLE_HTTP)
 	// svr
   	static auto http_svr_ptr = std::make_shared<http_svr_proxy<http_svr>>(6);
   	http_svr_ptr->start("0.0.0.0", "18888");
@@ -256,7 +256,7 @@ void http_tst() {
 }
 
 void ws_tst() {
-#if 0 //defined(NET_USE_HTTP)
+#if defined(BNET_ENABLE_HTTP)
 	// svr
   	static auto ws_svr_ptr = std::make_shared<svr_proxy<ws_svr>>(8);
   	ws_svr_ptr->start("0.0.0.0", "8888");
@@ -271,7 +271,7 @@ void ws_tst() {
 }
 
 void wss_tst() {
-#if 0 //defined(NET_USE_SSL) && defined(NET_USE_HTTP)
+#if defined(BNET_ENABLE_SSL) && defined(BNET_ENABLE_HTTP)
 	// svr
 	static auto wss_svr_ptr = std::make_shared<svr_proxy<wss_svr>>(8);
     wss_svr_ptr->set_verify_mode(asio::ssl::verify_peer | asio::ssl::verify_fail_if_no_peer_cert);
@@ -319,7 +319,7 @@ void timer_tst() {
 	});
 }
 
-void tree_tst() {
+void route_tst() {
 	auto start_time = get_cur_time();
 
   	//for (int i = 0; i < 100; i++) {

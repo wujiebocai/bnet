@@ -1,3 +1,9 @@
+/*
+ * Copyright (c) 2023 bocai
+ *
+ * Distributed under the Boost Software License, Version 1.0. (See accompanying
+ * file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+ */
 #pragma once
 
 #include "asio/experimental/awaitable_operators.hpp"
@@ -300,7 +306,6 @@ namespace bnet::base {
                     return ec;
                 };
                 
-                //this->endpoints_ = endpoints;
                 auto dptr = this->shared_from_this();
                 for (auto && item : endpoints) {
                     if (auto ec = handle_func(item); ec) {
@@ -308,7 +313,6 @@ namespace bnet::base {
                     }
                     auto [ec] = co_await dptr->socket().lowest_layer().async_connect(item, asio::as_tuple(asio::use_awaitable));
                     if (ec) {
-						//std::cout << "ccccccccccccc:" << ec.message() << std::endl; //如果出现错误asio::error::host_not_found，就打开这个日志看看
                         if (ec != asio::error::operation_aborted) continue;
 						co_return ec;
                     }

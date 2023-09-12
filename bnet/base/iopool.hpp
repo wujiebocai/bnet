@@ -1,3 +1,9 @@
+/*
+ * Copyright (c) 2023 bocai
+ *
+ * Distributed under the Boost Software License, Version 1.0. (See accompanying
+ * file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+ */
 #pragma once
 
 namespace bnet::base {
@@ -25,17 +31,14 @@ namespace bnet::base {
 		~iopool_imp() = default;
 
 		bool start() {
-			std::lock_guard<std::mutex> guard(this->mutex_);
 			if (!stopped_)
 				return false;
+
 			if (!this->works_.empty() || !this->threads_.empty())
 				return false;
 
 			for (auto & io : this->ios_) {
 				io.context().restart();
-			}
-
-			for (auto & io : this->ios_) {
 				this->works_.emplace_back(io.context().get_executor());
 				// start work thread
 				this->threads_.emplace_back([&io]() {
@@ -49,46 +52,34 @@ namespace bnet::base {
 		}
 
 		void stop() {
-			{
-				std::lock_guard<std::mutex> guard(this->mutex_);
+			if (stopped_)
+				return;
 
-				if (stopped_)
-					return;
+			if (this->works_.empty() && this->threads_.empty())
+				return;
 
-				if (this->works_.empty() && this->threads_.empty())
-					return;
+			if (this->running_in_iopool_threads())
+				return;
 
-				if (this->running_in_iopool_threads())
-					return;
+			stopped_ = true;
 
-				stopped_ = true;
+			for (auto & io : this->ios_) {
+				io.context().stop();
 			}
 
-			{
-				for (std::size_t i = 0; i < this->ios_.size(); ++i) {
-					asio::io_context& ioc = this->ios_.at(i).context();
-					ioc.stop();
-				}
+			for (auto & work : this->works_) {
+				work.reset();
 			}
 
-			{
-				std::lock_guard<std::mutex> guard(this->mutex_);
-
-				for (std::size_t i = 0; i < this->works_.size(); ++i) {
-					this->works_[i].reset();
-				}
-
-				for (auto & thread : this->threads_) {
-					thread.join();
-				}
-
-				this->works_.clear();
-				this->threads_.clear();
+			for (auto & thread : this->threads_) {
+				thread.join();
 			}
+
+			this->works_.clear();
+			this->threads_.clear();
 		}
 
 		inline nio & get(std::size_t index = static_cast<std::size_t>(-1)) {
-			//return this->ios_[index < this->ios_.size() ? index : ((++(this->next_)) % this->ios_.size())];
 			return this->ios_[(index == static_cast<std::size_t>(-1) ?
 				((++(this->next_)) % this->ios_.size()) : (index % this->ios_.size()))];
 		}
@@ -106,8 +97,8 @@ namespace bnet::base {
 		std::vector<std::thread> threads_;
 		std::vector<nio> ios_;
 		std::vector<asio::executor_work_guard<asio::io_context::executor_type>> works_;
-		std::mutex  mutex_;
-		bool stopped_ = true;
+		//std::mutex  mutex_;
+		std::atomic<bool> stopped_ = true;
 		std::size_t next_ = 0;
 	};
 

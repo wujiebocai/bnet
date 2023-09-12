@@ -1,17 +1,15 @@
 /*
- * This file is part of tcpflow by Simson Garfinkel <simsong@acm.org>.
- * Originally by Will Glynn <will@willglynn.com>.
+ * Copyright (c) 2023 bocai
  *
- * This source code is under the GNU Public License (GPL) version 3.
- * See COPYING for details.
- *
+ * Distributed under the Boost Software License, Version 1.0. (See accompanying
+ * file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
  */
 
 #pragma once
 
 #include <filesystem>
 #include "tool/str.hpp"
-#if defined(NET_USE_HTTP)
+#if defined(BNET_ENABLE_HTTP)
 #include "base/http/parse.hpp"
 #include "base/http/mime_types.hpp"
 #include "base/http/multipart.hpp"
@@ -33,7 +31,7 @@ namespace bnet::base {
 		explicit proto([[maybe_unused]] FArgs&&... args) {}
 	};
 
-#if defined(NET_USE_HTTP)
+#if defined(BNET_ENABLE_HTTP)
 	template<class SvrOrCli>
 	class http_proto : public http_tag {
 	public:
@@ -58,7 +56,7 @@ namespace bnet::base {
 	};
 #endif
 
-#if defined(NET_USE_HTTP)
+#if defined(BNET_ENABLE_HTTP)
 	template<class SvrOrCli>
 	class ws_proto : public ws_tag {
 	public:

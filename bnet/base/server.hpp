@@ -1,3 +1,9 @@
+/*
+ * Copyright (c) 2023 bocai
+ *
+ * Distributed under the Boost Software License, Version 1.0. (See accompanying
+ * file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+ */
 #pragma once
 
 //#include <memory>
@@ -139,7 +145,7 @@ namespace bnet::base {
 
 		inline session_ptr_type make_session() {
 			auto& cio = this->iopool_.get();
-#if defined(NET_USE_SSL)
+#if defined(BNET_ENABLE_SSL)
 			if constexpr (is_ssl_stream<StreamType>) {
 				return std::make_shared<session_type>(this->globalval_, this->cbfunc_, cio, this->max_buffer_size_
 					, cio, asio::ssl::stream_base::server, cio.context(), *this);

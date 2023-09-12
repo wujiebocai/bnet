@@ -1,3 +1,9 @@
+/*
+ * Copyright (c) 2023 bocai
+ *
+ * Distributed under the Boost Software License, Version 1.0. (See accompanying
+ * file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+ */
 #pragma once
 
 #include "base/traits.hpp"
@@ -9,7 +15,7 @@ namespace bnet::base {
         requires std::is_same_v<unqualified_t<typename StreamType::stream_type>, void>;
     };
 
-#if defined(NET_USE_SSL)
+#if defined(BNET_ENABLE_SSL)
     template <class StreamType>
     concept is_ssl_stream = requires {
         typename StreamType::stream_type;

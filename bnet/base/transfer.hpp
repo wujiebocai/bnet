@@ -1,3 +1,9 @@
+/*
+ * Copyright (c) 2023 bocai
+ *
+ * Distributed under the Boost Software License, Version 1.0. (See accompanying
+ * file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
+ */
 #pragma once
 
 namespace bnet::base {
@@ -18,8 +24,13 @@ namespace bnet::base {
 
         template<class DataType>
         inline void send(DataType&& data) {
-			asio::co_spawn(this->derive_.cio().context(), [this, self = this->derive_.self_shared_ptr(), data = asio::buffer(std::move(data))]() { 
-                return this->send_t(std::move(data));
+			asio::co_spawn(this->derive_.cio().context(), [this, self = this->derive_.self_shared_ptr(), data = asio::buffer(std::move(data))]() -> asio::awaitable<size_t> { 
+                size_t size = 0;
+                 if (auto ec = co_await this->send_t(std::move(data), size); ec) {
+                    [[maybe_unused]] auto ret = co_await this->derive_.stop_t(ec);
+                }
+
+                co_return size; 
             }, asio::detached);
 		}
 
@@ -27,7 +38,7 @@ namespace bnet::base {
         inline void recv() {
 			asio::co_spawn(this->derive_.cio().context(), [this, self = this->derive_.self_shared_ptr()] () -> asio::awaitable<void> { 
                 if (auto ec = co_await this->recv_t(); ec) {
-                    this->derive_.stop(ec);
+                    co_await this->derive_.stop_t(ec);
                 }
                 co_return; 
             }, asio::detached);
@@ -35,34 +46,28 @@ namespace bnet::base {
 
         //template<class DataType> requires std::is_same_v<DataType, std::string>
         template<class Buffer>
-        asio::awaitable<std::size_t> send_t(Buffer&& buffer) {
-            error_code rec;
+        asio::awaitable<error_code> send_t(Buffer&& buffer, size_t& size) {
             try {
                 if (!this->derive_.is_started())
-					asio::detail::throw_error(asio::error::not_connected);
+                    co_return asio::error::not_connected;
 				if (buffer.size() <= 0)
-					asio::detail::throw_error(asio::error::invalid_argument);
+                    co_return asio::error::invalid_argument;
 
                 //auto [e2, nwritten] = co_await async_write(socket, asio::buffer(data, nread));
                 auto [ec, nsent] = co_await asio::async_write(this->derive_.socket(),
                     std::forward<Buffer>(buffer), asio::as_tuple(asio::use_awaitable));
                 if (ec) {
-                    asio::detail::throw_error(ec);
+                    co_return ec;
                 }
 
-                co_return nsent;
+                size = nsent;
             }
             catch (system_error& e) {
-                //this->derive_.stop(e.code());
-                rec = e.code();
+                co_return e.code();
             }
             catch (std::exception&) { set_last_error(asio::error::eof); }
 
-            if (rec) {
-                [[maybe_unused]] auto ret = co_await this->derive_.stop_t(rec);
-            }
-
-            co_return 0;
+            co_return ec_ignore;
         }
 
         asio::awaitable<error_code> recv_t() {
@@ -113,8 +118,13 @@ namespace bnet::base {
 
         template<class DataType>
         inline void send(DataType&& data) {
-			asio::co_spawn(this->derive_.cio().context(), [this, self = this->derive_.self_shared_ptr(), data = asio::buffer(std::move(data))]() { 
-                return this->send_t(std::move(data));
+			asio::co_spawn(this->derive_.cio().context(), [this, self = this->derive_.self_shared_ptr(), data = asio::buffer(std::move(data))]() -> asio::awaitable<size_t> { 
+                size_t size = 0;
+                 if (auto ec = co_await this->send_t(std::move(data), size); ec) {
+                    [[maybe_unused]] auto ret = co_await this->derive_.stop_t(ec);
+                }
+
+                co_return size; 
             }, asio::detached);
 		}
 
@@ -130,82 +140,70 @@ namespace bnet::base {
         inline void recv() {
 			asio::co_spawn(this->derive_.cio().context(), [this, self = this->derive_.self_shared_ptr()]() -> asio::awaitable<void> { 
                 if (auto ec = co_await this->recv_t(); ec) {
-                    this->derive_.stop(ec);
+                    co_await this->derive_.stop_t(ec);
                 }
                 co_return; 
             }, asio::detached);
 		}
 
         template<class Buffer>
-        asio::awaitable<std::size_t> send_t(Buffer&& buffer) requires is_cli_c<SvrOrCli> {
-            error_code rec;
+        asio::awaitable<error_code> send_t(Buffer&& buffer, size_t& size) requires is_cli_c<SvrOrCli> {
             try {
                 if (!this->derive_.is_started())
-					asio::detail::throw_error(asio::error::not_connected);
+                    co_return asio::error::not_connected;
 				if (buffer.size() <= 0)
-					asio::detail::throw_error(asio::error::invalid_argument);
+                    co_return asio::error::invalid_argument;
 
                 auto [ec, nsent] = co_await this->derive_.socket().async_send(std::forward<Buffer>(buffer), asio::as_tuple(asio::use_awaitable));
                 if (ec) {
-                    asio::detail::throw_error(ec);
+                    co_return ec;
                 }
 
-                co_return nsent;
+                size = nsent;
             }
             catch (system_error& e) {
-                //this->derive_.stop(e.code());
-                rec = e.code();
+                co_return e.code();
             }
             catch (std::exception&) { set_last_error(asio::error::eof); }
 
-            if (rec) {
-                [[maybe_unused]] auto ret = co_await this->derive_.stop_t(rec);
-            }
-
-            co_return 0;
+            co_return ec_ignore;
         }
 
         template<class Buffer>
-        asio::awaitable<std::size_t> send_t(Buffer&& buffer) requires is_svr_c<SvrOrCli> {
-            error_code rec;
+        asio::awaitable<error_code> send_t(Buffer&& buffer, size_t& size) requires is_svr_c<SvrOrCli> {
             try {
                 if (!this->derive_.is_started())
-					asio::detail::throw_error(asio::error::not_connected);
+                    co_return asio::error::not_connected;
 				if (buffer.size() <= 0)
-					asio::detail::throw_error(asio::error::invalid_argument);
+                    co_return asio::error::invalid_argument;
 
                 auto [ec, nsent] = co_await this->derive_.socket().async_send_to(std::forward<Buffer>(buffer), 
                                         this->remote_endpoint_, asio::as_tuple(asio::use_awaitable));
                 if (ec) {
-                    asio::detail::throw_error(ec);
+                    co_return ec;
                 }
 
-                co_return nsent;
+                size = nsent;
             }
             catch (system_error& e) {
-                //this->derive_.stop(e.code());
-                rec = e.code();
+                co_return e.code();
             }
             catch (std::exception&) { set_last_error(asio::error::eof); }
 
-            if (rec) {
-                [[maybe_unused]] auto ret = co_await this->derive_.stop_t(rec);
-            }
-
-            co_return 0;
+            co_return ec_ignore;
         }
 
         template<class Buffer>
-        asio::awaitable<std::size_t> send_t(std::string_view host, std::string_view port, Buffer&& buffer) {
+        asio::awaitable<error_code> send_t(std::string_view host, std::string_view port, Buffer&& buffer, size_t& size) {
             //using resolver_type = typename asio::ip::udp::resolver;
 			//using endpoints_type = typename resolver_type::results_type;
 
             error_code rec;
             try {
                 if (!this->derive_.is_started())
-					asio::detail::throw_error(asio::error::not_connected);
+                    co_return asio::error::not_connected;
 				if (buffer.size() <= 0)
-					asio::detail::throw_error(asio::error::invalid_argument);
+                    co_return asio::error::invalid_argument;
 
                 asio::ip::udp::resolver resolver(this->cio_.context());
                 auto [ec, endpoints] = co_await resolver.async_resolve(host, port, asio::as_tuple(asio::use_awaitable));
@@ -216,24 +214,19 @@ namespace bnet::base {
                 for (auto& iter = endpoints.begin(); iter != endpoints.end(); ++iter) {
                     auto [ec, nsent] = co_await this->derive_.socket().async_send_to(std::forward<Buffer>(buffer), 
                                         this->remote_endpoint_, asio::as_tuple(asio::use_awaitable));
-                    if (!ec) {
-                        co_return nsent;
+                    if (ec) {
+                        co_return ec;
                     }
-                }
 
-                co_return 0;
+                    size = nsent;
+                }
             }
             catch (system_error& e) {
-                //this->derive_.stop(e.code());
-                rec = e.code();
+                co_return e.code();
             }
             catch (std::exception&) { set_last_error(asio::error::eof); }
 
-            if (rec) {
-                [[maybe_unused]] auto ret = co_await this->derive_.stop_t(rec);
-            }
-
-            co_return 0;
+            co_return ec_ignore;
         }
         
 		inline asio::awaitable<error_code> recv_t() requires is_cli_c<SvrOrCli> {
@@ -283,7 +276,7 @@ namespace bnet::base {
 		const std::size_t init_buffer_size_ = 1024;
     };
 
-#if defined(NET_USE_HTTP)
+#if defined(BNET_ENABLE_HTTP)
     template<class DriverType, class StreamType, class ProtoType, class SvrOrCli> 
     requires is_http_proto<ProtoType> && is_tcp_by_stream<StreamType>
 	class transfer<DriverType, StreamType, ProtoType, SvrOrCli> {
@@ -299,13 +292,23 @@ namespace bnet::base {
         template<class DataType>
         inline void send(DataType&& data) {
             if constexpr (is_c_str_c<DataType>) {
-                asio::co_spawn(this->derive_.cio().context(), [this, self = this->derive_.self_shared_ptr(), data = std::string(std::move(data))]() { 
-                    return this->send_t(data);
+                asio::co_spawn(this->derive_.cio().context(), [this, self = this->derive_.self_shared_ptr(), data = std::string(std::move(data))]() -> asio::awaitable<size_t> { 
+                    size_t size = 0;
+                    if (auto ec = co_await this->send_t(std::move(data), size); ec) {
+                        [[maybe_unused]] auto ret = co_await this->derive_.stop_t(ec);
+                    }
+
+                    co_return size; 
                 }, asio::detached);
             }
             else {
-                asio::co_spawn(this->derive_.cio().context(), [this, self = this->derive_.self_shared_ptr(), data = std::move(data)]() { 
-                    return this->send_t(data);
+                asio::co_spawn(this->derive_.cio().context(), [this, self = this->derive_.self_shared_ptr(), data = std::move(data)]() -> asio::awaitable<size_t> { 
+                    size_t size = 0;
+                    if (auto ec = co_await this->send_t(std::move(data), size); ec) {
+                        [[maybe_unused]] auto ret = co_await this->derive_.stop_t(ec);
+                    }
+
+                    co_return size; 
                 }, asio::detached);
             }
 		}
@@ -313,15 +316,25 @@ namespace bnet::base {
         template<class DataType, class HandleFunc>
         inline void send(DataType&& data, HandleFunc&& f) {
             if constexpr (is_c_str_c<DataType>) {
-                asio::co_spawn(this->derive_.cio().context(), [this, self = this->derive_.self_shared_ptr(), data = std::string(std::move(data)), f = std::move(f)]() { 
+                asio::co_spawn(this->derive_.cio().context(), [this, self = this->derive_.self_shared_ptr(), data = std::string(std::move(data)), f = std::move(f)]() -> asio::awaitable<size_t> { 
                     this->derive_.cli_router().handle_func(std::move(f));
-                    return this->send_t(data);
+                    size_t size = 0;
+                    if (auto ec = co_await this->send_t(std::move(data), size); ec) {
+                        [[maybe_unused]] auto ret = co_await this->derive_.stop_t(ec);
+                    }
+
+                    co_return size; 
                 }, asio::detached);
             }
             else {
-                asio::co_spawn(this->derive_.cio().context(), [this, self = this->derive_.self_shared_ptr(), data = std::move(data), f = std::move(f)]() { 
+                asio::co_spawn(this->derive_.cio().context(), [this, self = this->derive_.self_shared_ptr(), data = std::move(data), f = std::move(f)]() -> asio::awaitable<size_t> { 
                     this->derive_.cli_router().handle_func(std::move(f));
-                    return this->send_t(data);
+                    size_t size = 0;
+                    if (auto ec = co_await this->send_t(std::move(data), size); ec) {
+                        [[maybe_unused]] auto ret = co_await this->derive_.stop_t(ec);
+                    }
+
+                    co_return size; 
                 }, asio::detached);
             }
 		}
@@ -330,7 +343,7 @@ namespace bnet::base {
         inline void recv() {
 			asio::co_spawn(this->derive_.cio().context(), [this, self = this->derive_.self_shared_ptr()]() -> asio::awaitable<void> { 
                 if (auto ec = co_await this->recv_t(); ec) {
-                    this->derive_.stop(ec);
+                    co_await this->derive_.stop_t(ec);
                 }
                 co_return; 
             }, asio::detached);
@@ -349,118 +362,96 @@ namespace bnet::base {
 		}
 
         template<is_string_like_or_constructible_c Data>
-        asio::awaitable<std::size_t> send_t(Data&& data) {
-            error_code rec;
+        asio::awaitable<error_code> send_t(Data&& data, size_t& size) {
             try {
                 if (!this->derive_.is_started())
-					asio::detail::throw_error(asio::error::not_connected);
-				//if (data.size() <= 0)
-				//	asio::detail::throw_error(asio::error::invalid_argument);
+                    co_return asio::error::not_connected;
+                if (data.size() <= 0)
+                    co_return asio::error::invalid_argument;
 
-                //auto [e2, nwritten] = co_await async_write(socket, asio::buffer(data, nread));
                 auto [ec, nsent] = co_await asio::async_write(this->derive_.socket(),
                     asio::buffer(std::move(data)), asio::as_tuple(asio::use_awaitable));
                 if (ec) {
-                    asio::detail::throw_error(ec);
+                    co_return ec;
                 }
 
-                co_return nsent;
+                size = nsent;
             }
             catch (system_error& e) {
-                //this->derive_.stop(e.code());
-                rec = e.code();
+                co_return e.code();
             }
             catch (std::exception&) { set_last_error(asio::error::eof); }
 
-            if (rec) {
-                [[maybe_unused]] auto ret = co_await this->derive_.stop_t(rec);
-            }
-
-            co_return 0;
+            co_return ec_ignore;
         }
 
         template<bool IsRequest, class Body, class Fields>
-		inline asio::awaitable<std::size_t> send_t(const http::message<IsRequest, Body, Fields>& data) {
-            error_code rec;
+		inline asio::awaitable<error_code> send_t(const http::message<IsRequest, Body, Fields>& data, size_t& size) {
             try {
                 if (!this->derive_.is_started())
-					asio::detail::throw_error(asio::error::not_connected);
+                    co_return asio::error::not_connected;
 
                 check_http_message_t(data);
 
                 auto [ec, nsent] = co_await http::async_write(this->derive_.socket(), data, asio::as_tuple(asio::use_awaitable));
                 if (ec) {
-                    asio::detail::throw_error(ec);
+                    co_return ec;
                 }
 
-                co_return nsent;
+                size = nsent;
             }
             catch (system_error& e) {
-                rec = e.code();
+                co_return e.code();
             }
             catch (std::exception&) { set_last_error(asio::error::eof); }
 
-            if (rec) {
-                [[maybe_unused]] auto ret = co_await this->derive_.stop_t(rec);
-            }
-
-            co_return 0;
+            co_return ec_ignore;
 		}
 
 		template<class Body, class Fields>
-		inline asio::awaitable<std::size_t> send_t(const http::http_request_impl_t<Body, Fields>& data) {
-            error_code rec;
+		inline asio::awaitable<error_code> send_t(const http::http_request_impl_t<Body, Fields>& data, size_t& size) {
             try {
                 if (!this->derive_.is_started())
-					asio::detail::throw_error(asio::error::not_connected);
+                    co_return asio::error::not_connected;
 
                 check_http_message_t(data.base());
 
                 auto [ec, nsent] = co_await http::async_write(this->derive_.socket(), data.base(), asio::as_tuple(asio::use_awaitable));
                 if (ec) {
-                    asio::detail::throw_error(ec);
+                    co_return ec;
                 }
 
-                co_return nsent;
+                size = nsent;
             }
             catch (system_error& e) {
-                rec = e.code();
+                co_return e.code();
             }
             catch (std::exception&) { set_last_error(asio::error::eof); }
 
-            if (rec) {
-                [[maybe_unused]] auto ret = co_await this->derive_.stop_t(rec);
-            }
-
-            co_return 0;
+            co_return ec_ignore;
 		}
 
 		template<class Body, class Fields>
-		inline asio::awaitable<std::size_t> send_t(const http::http_response_impl_t<Body, Fields>& data) {
-            error_code rec;
+		inline asio::awaitable<error_code> send_t(const http::http_response_impl_t<Body, Fields>& data, size_t& size) {
             try {
                 if (!this->derive_.is_started())
-					asio::detail::throw_error(asio::error::not_connected);
+                    co_return asio::error::not_connected;
 
                 check_http_message_t(data.base());
 
                 auto [ec, nsent] = co_await http::async_write(this->derive_.socket(), data, asio::as_tuple(asio::use_awaitable));
                 if (ec) {
-                    asio::detail::throw_error(ec);
+                    co_return ec;
                 }
 
-                co_return nsent;
+                size = nsent;
             }
             catch (system_error& e) {
-                rec = e.code();
+                co_return e.code();
             }
             catch (std::exception&) { set_last_error(asio::error::eof); }
 
-            if (rec) {
-                [[maybe_unused]] auto ret = co_await this->derive_.stop_t(rec);
-            }
-
-            co_return 0;
+            co_return ec_ignore;
 		}
 
         inline asio::awaitable<error_code> recv_t() requires is_svr_c<SvrOrCli> {
@@ -492,7 +483,6 @@ namespace bnet::base {
                 }
             }
             catch (system_error& e) {
-                //this->derive_.stop(e.code());
                 co_return e.code();
             }
 
@@ -509,7 +499,6 @@ namespace bnet::base {
                     auto [ec, nrecv] = co_await http::async_read(this->derive_.socket(), rbuff_, rep_,
                                             asio::as_tuple(asio::use_awaitable));
                     
-                    // 路由
                     this->handle_recv_c(ec);
 
                     if (ec) {
@@ -518,7 +507,6 @@ namespace bnet::base {
                 }
             }
             catch (system_error& e) {
-                //this->derive_.stop(e.code());
                 co_return e.code();
             }
 
@@ -535,7 +523,8 @@ namespace bnet::base {
             }
             else {
                 this->derive_.fill_route_fail(req_, rep_);
-                co_await this->send_t(rep_);
+                size_t size;
+                co_await this->send_t(rep_, size);
             }
             co_return;
 		}
@@ -568,7 +557,7 @@ namespace bnet::base {
     };
 #endif
 
-#if defined(NET_USE_HTTP)
+#if defined(BNET_ENABLE_HTTP)
     template<class DriverType, class StreamType, class ProtoType, class SvrOrCli> 
     requires is_ws_proto<ProtoType> && is_tcp_by_stream<StreamType>
 	class transfer<DriverType, StreamType, ProtoType, SvrOrCli> {
@@ -583,12 +572,22 @@ namespace bnet::base {
         template<class DataType>
         inline void send(DataType&& data) {
 			if constexpr (is_string_like_or_constructible<unqualified_t<DataType>>::value) {
-                asio::co_spawn(this->derive_.cio().context(), [this, self = this->derive_.self_shared_ptr(), data = asio::buffer(std::move(data))]() { 
-                    return this->send_t(std::move(data));
+                asio::co_spawn(this->derive_.cio().context(), [this, self = this->derive_.self_shared_ptr(), data = asio::buffer(std::move(data))]() -> asio::awaitable<size_t> { 
+                    size_t size = 0;
+                    if (auto ec = co_await this->send_t(std::move(data), size); ec) {
+                        [[maybe_unused]] auto ret = co_await this->derive_.stop_t(ec);
+                    }
+
+                    co_return size; 
                 }, asio::detached);
             } else {
-                asio::co_spawn(this->derive_.cio().context(), [this, self = this->derive_.self_shared_ptr(), data = std::move(data)]() { 
-                    return this->send_t(std::move(data));
+                asio::co_spawn(this->derive_.cio().context(), [this, self = this->derive_.self_shared_ptr(), data = std::move(data)]() -> asio::awaitable<size_t> { 
+                    size_t size = 0;
+                    if (auto ec = co_await this->send_t(std::move(data), size); ec) {
+                        [[maybe_unused]] auto ret = co_await this->derive_.stop_t(ec);
+                    }
+
+                    co_return size; 
                 }, asio::detached);
             }
 		}
@@ -596,79 +595,65 @@ namespace bnet::base {
         inline void recv() {
 			asio::co_spawn(this->derive_.cio().context(), [this, self = this->derive_.self_shared_ptr()]() -> asio::awaitable<void> { 
                 if (auto ec = co_await this->recv_t(); ec) {
-                    this->derive_.stop(ec);
+                    co_await this->derive_.stop_t(ec);
                 }
                 co_return; 
             }, asio::detached);
 		}
         
         template<class Buffer>
-        asio::awaitable<std::size_t> send_t(Buffer&& data) {
-            error_code rec;
+        asio::awaitable<error_code> send_t(Buffer&& data, size_t& size) {
             try {
                 if (!this->derive_.is_started())
-					asio::detail::throw_error(asio::error::not_connected);
+                    co_return asio::error::not_connected;
 
                 auto [ec, nsent] = co_await this->derive_.stream().async_write(std::forward<Buffer>(data), asio::as_tuple(asio::use_awaitable));
                 if (ec) {
-                    asio::detail::throw_error(ec);
+                    co_return ec;
                 }
 
-                co_return nsent;
+                size = nsent;
             }
             catch (system_error& e) {
-                //this->derive_.stop(e.code());
-                set_last_error(e.code());
-                rec = e.code();
+                co_return e.code();
             }
             catch (std::exception&) { set_last_error(asio::error::eof); }
 
-            if (rec) {
-                [[maybe_unused]] auto ret = co_await this->derive_.stop_t(rec);
-            }
-
-            co_return 0;
+            co_return ec_ignore;
         }
 
         template<bool IsRequest, class Body, class Fields>
-        asio::awaitable<std::size_t> send_t(http::message<IsRequest, Body, Fields>& data) {
-            error_code rec;
+        asio::awaitable<error_code> send_t(http::message<IsRequest, Body, Fields>& data, size_t& size) {
             try {
                 if (!this->derive_.is_started())
-					asio::detail::throw_error(asio::error::not_connected);
+                    co_return asio::error::not_connected;
 				
                 std::ostringstream oss;
 			    oss << data;
 
                 auto [ec, nsent] = co_await this->derive_.stream().async_write(asio::buffer(oss.str()), asio::as_tuple(asio::use_awaitable));
                 if (ec) {
-                    asio::detail::throw_error(ec);
+                    co_return ec;
                 }
 
-                co_return nsent;
+                size = nsent;
             }
             catch (system_error& e) {
-                //this->derive_.stop(e.code());
-                set_last_error(e.code());
-                rec = e.code();
+                co_return e.code(); 
             }
             catch (std::exception&) { set_last_error(asio::error::eof); }
 
-            if (rec) {
-                [[maybe_unused]] auto ret = co_await this->derive_.stop_t(rec);
-            }
-
-            co_return 0;
+            co_return ec_ignore;
         }
 
 		template<class Body, class Fields>
-		inline asio::awaitable<std::size_t> send_t(http::http_request_impl_t<Body, Fields>& data) {
-			co_return this->send_t(data.base());
+		inline asio::awaitable<error_code> send_t(http::http_request_impl_t<Body, Fields>& data, size_t& size) {
+			return this->send_t(data.base(), size);
 		}
 
 		template<class Body, class Fields>
-		inline asio::awaitable<std::size_t> send_t(http::http_response_impl_t<Body, Fields>& data) {
-			co_return this->send_t(data.base());
+		inline asio::awaitable<std::size_t> send_t(http::http_response_impl_t<Body, Fields>& data, size_t& size) {
+			return this->send_t(data.base(), size);
 		}
 
         inline asio::awaitable<error_code> recv_t() {
@@ -690,7 +675,6 @@ namespace bnet::base {
                 }
             }
             catch (system_error& e) {
-                //this->derive_.stop(e.code());
                 co_return e.code();
             }
 
@@ -722,8 +706,13 @@ namespace bnet::base {
 
         template<class DataType>
         inline void send(DataType&& data) {
-			asio::co_spawn(this->derive_.cio().context(), [this, self = this->derive_.self_shared_ptr(), data = asio::buffer(std::move(data))]() { 
-                return this->send_t(std::move(data));
+			asio::co_spawn(this->derive_.cio().context(), [this, self = this->derive_.self_shared_ptr(), data = asio::buffer(std::move(data))]() -> asio::awaitable<size_t> { 
+                size_t size = 0;
+                if (auto ec = co_await this->send_t(std::move(data), size); ec) {
+                    [[maybe_unused]] auto ret = co_await this->derive_.stop_t(ec);
+                }
+
+                co_return size; 
             }, asio::detached);
 		}
 
@@ -746,7 +735,7 @@ namespace bnet::base {
         inline void recv() {
 			asio::co_spawn(this->derive_.cio().context(), [this, self = this->derive_.self_shared_ptr()]() -> asio::awaitable<void> { 
                 if (auto ec = co_await this->recv_t(); ec) {
-                    this->derive_.stop(ec);
+                    co_await this->derive_.stop_t(ec);
                 }
                 co_return; 
             }, asio::detached);
@@ -773,13 +762,12 @@ namespace bnet::base {
 		}
 */
         template<class Buffer>
-        asio::awaitable<std::size_t> send_t(Buffer&& buffer) {
-            error_code rec;
+        asio::awaitable<error_code> send_t(Buffer&& buffer, size_t& size) {
             try {
                 if (!this->derive_.is_started())
-					asio::detail::throw_error(asio::error::not_connected);
+                    co_return asio::error::not_connected;
 				if (buffer.size() <= 0)
-					asio::detail::throw_error(asio::error::invalid_argument);
+                    co_return asio::error::invalid_argument;
 
                 int ret = kcp::ikcp_send(this->derive_.kcp(), (const char *)buffer.data(), (int)buffer.size());
 
@@ -794,19 +782,14 @@ namespace bnet::base {
 			    	kcp::ikcp_flush(this->derive_.kcp());
 			    }
 
-                co_return std::size_t(ret);
+                size = std::size_t(ret);
             }
             catch (system_error& e) {
-                //this->derive_.stop(e.code());
-                rec = e.code();
+                co_return e.code();
             }
             catch (std::exception&) { set_last_error(asio::error::eof); }
 
-            if (rec) {
-                [[maybe_unused]] auto ret = co_await this->derive_.stop_t(rec);
-            }
-
-            co_return 0;
+            co_return ec_ignore;
         }
         
 		inline asio::awaitable<error_code> recv_t() requires is_cli_c<SvrOrCli> {

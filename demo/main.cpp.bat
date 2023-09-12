@@ -506,7 +506,7 @@ int main(int argc, char * argv[]) {
 	}
 #endif
 /////////////////////tcps////////////////////////////////////////////
-#if defined(NET_USE_SSL)
+#if defined(BNET_ENABLE_SSL)
 	// svr
     auto tcps_svr_ptr = std::make_shared<svr_proxy<tcps_svr>>(4); 
 	tcps_svr_ptr->set_verify_mode(asio::ssl::verify_peer | asio::ssl::verify_fail_if_no_peer_cert);

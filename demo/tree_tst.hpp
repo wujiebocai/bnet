@@ -116,7 +116,7 @@ uint32_t check_priorities(const std::shared_ptr<redix_tree::node>& node) {
     return prio;
 }
 
-void test_route () {
+void tree_tst () {
     redix_tree tree;
 
     for (auto &&i : routes) {
