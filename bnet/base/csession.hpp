@@ -47,37 +47,17 @@ namespace bnet::base {
 
 		~csession() = default;
 
-        template<bool IsKeepAlive = false>
-		inline void start(std::string_view host, std::string_view port) {
+        template<bool IsKeepAlive = false, typename Fun> 
+		requires is_co_spawn_cb<Fun> || std::same_as<unqualified_t<Fun>, asio::detached_t>
+		inline void start(std::string_view host, std::string_view port, Fun&& func) {
 			asio::co_spawn(this->cio_.context(), [this, self = self_shared_ptr(), host, port]() { 
-				return self->template start_t<IsKeepAlive>(host, port);
-			}, asio::detached);
-		}
-
-		template<bool IsKeepAlive = false>
-		inline bool sync_start(std::string_view host, std::string_view port) {
-			std::promise<bool> promise;
-			std::future<bool> future = promise.get_future();
-			asio::co_spawn(this->cio_.context(), [this, self = self_shared_ptr(), host, port]() { 
-				return self->template start_t<IsKeepAlive>(host, port);
-			}, 
-			[&promise](std::exception_ptr ex, bool ret) { 
-				if (ex) {
-					
-				}
-				promise.set_value(ret);
-    		});
-
-			//if (auto ret = future.wait_for(std::chrono::milliseconds(200)); ret != std::future_status::ready) {
-			//	return false;
-			//}
-
-			return future.get();
+				return self->template co_start<IsKeepAlive>(host, port);
+			}, func);
 		}
 
 		inline void stop(const error_code& ec) {
 			asio::co_spawn(this->cio_.context(), [this, self = self_shared_ptr(), ec = std::move(ec)]() { 
-				return self->stop_t(ec);
+				return self->co_stop(ec);
 			}, asio::detached);
 		}
 
@@ -88,18 +68,18 @@ namespace bnet::base {
 			}
 
 			asio::co_spawn(this->cio_.context(), [this, self = self_shared_ptr()]() -> asio::awaitable<void> { 
-				co_await async_sleep(co_await asio::this_coro::executor, std::chrono::seconds(2), asio::use_awaitable);
-				co_await this->template start_t<IsKeepAlive>(this->host_, this->port_);
+				co_await async_sleep(co_await asio::this_coro::executor, std::chrono::seconds(3), asio::use_awaitable);
+				co_await this->template co_start<IsKeepAlive>(this->host_, this->port_);
 				co_return;
 			}, asio::detached);
 			
 			return true;
 		}
 
-		//asio::ip::tcp::endpoint ep(asio::ip::tcp::v4(), 1234);
-		//asio::ip::udp::endpoint ep(asio::ip::udp::v6(), 9876);
-		//asio::ip::tcp::endpoint ep(asio::ip::address_v4::from_string("..."), 1234);
-		//asio::ip::udp::endpoint ep(asio::ip::address_v6::from_string("..."), 9876);
+		//asio::ip::tcp::endpoint ep(asio::ip::tcp::v4(), 10000);
+		//asio::ip::udp::endpoint ep(asio::ip::udp::v6(), 10001);
+		//asio::ip::tcp::endpoint ep(asio::ip::address_v4::from_string("..."), 10000);
+		//asio::ip::udp::endpoint ep(asio::ip::address_v6::from_string("..."), 10001);
 		//template<typename IP>
 		//inline void endpoint(const IP& ip, unsigned short port) {
 		//	this->endpoint_ = endpoint_type(ip, port);
@@ -121,13 +101,6 @@ namespace bnet::base {
 		}
 		inline key_type hash_key() const {
 			return reinterpret_cast<key_type>(this);
-			/*if constexpr (is_tcp_socket_v<socket_type>) {
-				return reinterpret_cast<key_type>(this);
-			}
-			else if constexpr (is_udp_socket_v<socket_type>) {
-				//return this->remote_endpoint_;
-				return this->stream().lowest_layer().local_endpoint();
-			}*/
 		}
 
 		template<class DataT>
@@ -148,7 +121,7 @@ namespace bnet::base {
 		//inline auto& host() { return host_; }
 	//protected:
         template<bool IsKeepAlive = false>
-		inline asio::awaitable<bool> start_t(std::string_view host, std::string_view port) {
+		inline asio::awaitable<error_code> co_start(std::string_view host, std::string_view port) {
 			error_code rec;
 			try {
 				clear_last_error();
@@ -160,8 +133,8 @@ namespace bnet::base {
 
 				//cbfunc_->call(event::init);
 
-                this->ctimer_.expires_after(std::chrono::milliseconds(500));
-                std::variant<error_code, std::monostate> rets = co_await (this->template connect<IsKeepAlive>(host, port) || this->ctimer_.async_wait(asio::use_awaitable));
+                this->ctimer_.expires_after(std::chrono::milliseconds(3000));
+                std::variant<error_code, std::monostate> rets = co_await (this->template co_connect<IsKeepAlive>(host, port) || this->ctimer_.async_wait(asio::use_awaitable));
                 auto idx = rets.index();
                 if (idx == 0) {
                     error_code ret = std::get<0>(rets);
@@ -191,12 +164,12 @@ namespace bnet::base {
 				
 					cbfunc_->call(event::connect, dptr);
 
-					//if (auto ec = co_await this->recv_t(); ec) {
+					//if (auto ec = co_await this->recv_t(); ec) { // sync will block
 					//	asio::detail::throw_error(ec);
 					//}
 					this->recv();
 					
-                    co_return true;
+                    co_return ec_ignore;
                 }
 
 				if (idx == 1) {
@@ -216,13 +189,13 @@ namespace bnet::base {
 			}
 
 			if (rec) {
-				[[maybe_unused]] auto ret =  co_await this->stop_t(rec);
+				[[maybe_unused]] auto ret =  co_await this->co_stop(rec);
 			}
 
-			co_return false;
+			co_return rec;
 		}
 
-        inline asio::awaitable<bool> stop_t(const error_code& ec) {
+        inline asio::awaitable<error_code> co_stop(const error_code& ec) {
             try {
                 estate expected_starting = estate::starting;
 			    estate expected_started = estate::started;
@@ -253,19 +226,19 @@ namespace bnet::base {
 						cbfunc_->call(event::disconnect, dptr, ec);
 					}
 
-                    co_return true;
+                    co_return ec_ignore;
                 }
             }
             catch (system_error& e) {
 				set_last_error(e);
-				std:: cout << "cli session stop_t:" << e.what() << std::endl;
-			}
+				std:: cout << "cli session co_stop:" << e.what() << std::endl;
 
-            co_return false;
+				co_return e.code();
+			}
 		}
 
         template<bool IsKeepAlive = false>
-        inline asio::awaitable<error_code> connect(const std::string_view& host, const std::string_view& port) {
+        inline asio::awaitable<error_code> co_connect(const std::string_view& host, const std::string_view& port) {
             try {
                 this->host_ = host;
 			    this->port_ = port;

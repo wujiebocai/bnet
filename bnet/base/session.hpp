@@ -42,13 +42,13 @@ namespace bnet::base {
 		template<bool iskeepalive = false>
 		inline void start() {
 			asio::co_spawn(this->cio_.context(), [this, self = self_shared_ptr()]() { 
-				return self->template start_t<iskeepalive>();
+				return self->template co_start<iskeepalive>();
 			}, asio::detached);
 		}
 
 		inline void stop(const error_code& ec) {
 			asio::co_spawn(this->cio_.context(), [this, self = self_shared_ptr(), ec = std::move(ec)]() { 
-				return self->stop_t(ec);
+				return self->co_stop(ec);
 			}, asio::detached);
 		}
 
@@ -93,7 +93,7 @@ namespace bnet::base {
 		}
 	//protected:
 		template<bool iskeepalive = false>
-		inline asio::awaitable<bool> start_t() {
+		inline asio::awaitable<error_code> co_start() {
 			error_code rec;
 			try {
 				//cbfunc_->call(event::accept, dptr, ec);
@@ -130,23 +130,23 @@ namespace bnet::base {
 				//}
 				this->recv();
 				
-				co_return true;
+				co_return ec_ignore;
 			}
 			catch (system_error& e) {
 				set_last_error(e);
-				std:: cout << "svr session start_t:" << e.what() << std::endl;
+				std:: cout << "svr session co_start:" << e.what() << std::endl;
 				//this->stop(e.code());
 				rec = e.code();
 			}
 
 			if (rec) {
-				[[maybe_unused]] auto ret =  co_await this->stop_t(rec);
+				[[maybe_unused]] auto ret =  co_await this->co_stop(rec);
 			}
 
-			co_return false;
+			co_return rec;
 		}
 
-		inline asio::awaitable<bool> stop_t(const error_code& ec) {
+		inline asio::awaitable<error_code> co_stop(const error_code& ec) {
 			try {
 				estate expected_starting = estate::starting;
 				estate expected_started = estate::started;
@@ -178,15 +178,14 @@ namespace bnet::base {
 					else {
 						NET_ASSERT(false);
 					}
-					co_return true;
+					co_return ec_ignore;
 				}
 			}
 			catch (system_error& e) {
 				set_last_error(e);
-				std:: cout << "svr session stop_t:" << e.what() << std::endl;
+				std:: cout << "svr session co_stop:" << e.what() << std::endl;
+				co_return e.code();
 			}
-
-			co_return false;
 		}
 
 		inline auto& globalval() { return globalval_; }

@@ -56,18 +56,18 @@ namespace bnet::base {
 
         inline void start(const std::string_view& host, const std::string_view& service) {
 			asio::co_spawn(this->accept_io_.context(), [this/*, self = this->self_shared_ptr()*/, host, service]() { 
-				return this->start_t(host, service);
+				return this->co_start(host, service);
 			}, asio::detached);
         }
 
 		inline void stop(const error_code& ec) {
 			asio::co_spawn(this->accept_io_.context(), [this/*, self = this->self_shared_ptr()*/, ec = std::move(ec)]() { 
-				return this->stop_t(ec);
+				return this->co_stop(ec);
 			}, asio::detached);
 		}
 
 	//protected:
-		inline asio::awaitable<bool> start_t(std::string_view host, std::string_view service) {
+		inline asio::awaitable<bool> co_start(std::string_view host, std::string_view service) {
 			try {
 				clear_last_error();
 				
@@ -98,7 +98,7 @@ namespace bnet::base {
 			co_return false;
 		}
 
-		inline asio::awaitable<bool> stop_t(const error_code& ec) {
+		inline asio::awaitable<bool> co_stop(const error_code& ec) {
 			try {
 				estate expected_starting = estate::starting;
 				estate expected_started = estate::started;

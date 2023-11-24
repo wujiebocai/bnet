@@ -1,0 +1,8 @@
+
+/build/*
+/__GEN/
+
+*.lock
+*.pid
+*.log
+*.test

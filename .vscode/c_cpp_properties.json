@@ -5,14 +5,14 @@
             "includePath": [
                 "${workspaceFolder}/**"
             ],
-            "defines": [],
+            "defines": [
+                "BNET_ENABLE_HTTP=1",
+                "BNET_ENABLE_SSL=1"
+            ],
             "compilerPath": "/usr/bin/gcc",
             "cStandard": "c17",
             "cppStandard": "gnu++20",
-            "intelliSenseMode": "linux-gcc-x64",
-            "compilerArgs": [
-                "-DNET_USE_HTTP=ON, -DNET_USE_SSL=ON"
-            ]
+            "intelliSenseMode": "linux-gcc-x64"
         }
     ],
     "version": 4

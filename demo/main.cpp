@@ -61,7 +61,7 @@ public:
 			//std::cout << s << count_ << std::endl;
 			//count_.fetch_add(s.size());
 			ptr->send(std::move(s));
-			++count_;
+			count_.fetch_add(1, std::memory_order::relaxed);
 		});
 
 		this->bind(event::upgrade, &svr_proxy::upgrade, this);
@@ -143,14 +143,14 @@ void tcp_tst() {
 #if 1
 	// svr
 	static auto tcpsvr = svr_proxy<tcp_svr>(8);
-	tcpsvr.start("0.0.0.0", "8585");
+	tcpsvr.start("0.0.0.0", "8888");
     tcpsvr.test_timer();
 	//std::this_thread::sleep_for(std::chrono::milliseconds(2000));
     //cli
     static auto tcpcli = cli_proxy<tcp_cli>(5);
     tcpcli.start();
     for (int i = 0; i < 44; ++i) {
-        tcpcli.add("192.168.152.62", "8585");
+        tcpcli.add("127.0.0.1", "8888");
     }
 	//std::this_thread::sleep_for(std::chrono::milliseconds(2000));
 #endif
@@ -197,9 +197,10 @@ void http_tst() {
 	static auto http_cli_ptr = std::make_shared<http_cli_proxy<http_cli>>(3);
 	http_cli_ptr->start();
 	for (int i = 0; i < 1; ++i) {
-		http_cli_ptr->add<false>("192.168.39.63", "9902");
+		http_cli_ptr->add<false>("127.0.0.1", "18888");
 	}
 	auto start_time = get_cur_time();
+	/*
 	http_cli_ptr->execute("GET /check?name=aaa&ip=127.0.0.1 HTTP/1.1\r\n\r\n", [start_time]([[maybe_unused]]const error_code& ec, http::web_response& rep) mutable {
 		if (ec) {
 			std::cout << "errmsg: " << ec.message() << std::endl;
@@ -211,9 +212,10 @@ void http_tst() {
 	auto rsp = http::execute("http://192.168.39.63:9902/check?name=aaa&ip=127.0.0.1");
 	std::cout << "sssssssssssssssss:" << rsp << std::endl;
 	return;
+	*/
 	std::string_view msg("GET /api/user/tt HTTP/1.1\r\n\r\n");
 	for (int i = 0; i < 100000; ++i) {
-	http_cli_ptr->execute(msg, [start_time]([[maybe_unused]]const error_code& ec, http::web_response& rep) mutable {
+	http_cli_ptr->execute("GET /api/user/tt HTTP/1.1\r\n\r\n", [start_time]([[maybe_unused]]const error_code& ec, http::web_response& rep) mutable {
 		//std::cout << "client:" << rep << std::endl;
 		if (ec) {
 			std::cout << "errmsg: " << ec.message() << std::endl;
@@ -225,7 +227,7 @@ void http_tst() {
 			std::cout << "======================================================= " << httpcount << " " << (end_time - start_time) << std::endl;
 		}
 	});
-	http_cli_ptr->execute(msg, [start_time]([[maybe_unused]]const error_code& ec, [[maybe_unused]]http::web_response& rep) {
+	http_cli_ptr->execute("GET /api/user/tt HTTP/1.1\r\n\r\n", [start_time]([[maybe_unused]]const error_code& ec, [[maybe_unused]]http::web_response& rep) {
 		//std::cout << "client2:" << rep << std::endl;
 		if (ec) {
 			std::cout << "errmsg: " << ec.message() << std::endl;
@@ -238,7 +240,7 @@ void http_tst() {
 		}
 	});
 
-	http_cli_ptr->execute(msg, [start_time]([[maybe_unused]]const error_code& ec, [[maybe_unused]]http::web_response& rep) {
+	http_cli_ptr->execute("GET /api/user/tt HTTP/1.1\r\n\r\n", [start_time]([[maybe_unused]]const error_code& ec, [[maybe_unused]]http::web_response& rep) {
 		//std::cout << "client3:" << rep << std::endl;
 		//std::cout << "client3:" << rep.body().text() << std::endl;
 		if (ec) {
@@ -264,7 +266,7 @@ void ws_tst() {
 	//cli
 	static auto ws_cli_ptr = std::make_shared<cli_proxy<ws_cli>>(5);
 	ws_cli_ptr->start();
-	for (int i = 0; i < 5000; ++i) {
+	for (int i = 0; i < 44; ++i) {
 		ws_cli_ptr->add("127.0.0.1", "8888");
 	}
 #endif
@@ -332,7 +334,7 @@ void route_tst() {
 
 //int main(int argc, char * argv[]) {
 int main() {
-	http_tst();
+	kcp_tst();
 	std::cout << "ssssssssssssssstop" << std::endl;
 
 	asio::signal_set signals(g_context_, SIGINT, SIGTERM);

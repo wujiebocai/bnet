@@ -76,4 +76,9 @@ namespace bnet::base {
 	concept is_svr_c = std::is_same_v<SvrOrCli, svr_tag>;
 	template<class SvrOrCli>
 	concept is_cli_c = std::is_same_v<SvrOrCli, cli_tag>;
+
+    template<typename T>
+	concept is_co_spawn_cb = requires(T a, std::exception_ptr ex) {
+    	{ a(ex, error_code()) } -> std::same_as<void>;
+	};
 }

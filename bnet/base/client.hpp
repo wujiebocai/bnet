@@ -51,8 +51,20 @@ namespace bnet::base {
 			clear_last_error();
             
 			std::shared_ptr<session_type> session_ptr = this->make_session();
-			if constexpr (IsAsync) session_ptr->template start<IsKeepAlive>(host, port);
-			else session_ptr->template sync_start<IsKeepAlive>(host, port);
+			if constexpr (IsAsync) session_ptr->template start<IsKeepAlive>(host, port, asio::detached);
+			else {
+				std::promise<error_code> promise;
+				std::future<error_code> future = promise.get_future();
+				session_ptr->template start<IsKeepAlive>(host, port,
+					[&promise](std::exception_ptr ex, error_code ret) { 
+					if (ex) {}
+					promise.set_value(ret);
+    			});
+				//if (auto ret = future.wait_for(std::chrono::milliseconds(200)); ret != std::future_status::ready) {
+					//	return false;
+				//}
+				return bool(future.get());
+			}
 
             return true;
 		}
@@ -87,36 +99,6 @@ namespace bnet::base {
 				return this->stop_t(ec);
 		}
 
-        inline void stop_t(const error_code& ec) {
-            set_last_error(ec);
-
-            this->globalval_.sessions_.foreach([this, ec](session_ptr_type& session_ptr) {
-				session_ptr->stop(ec);
-			});
-
-            estate expected = estate::stopping;
-			if (this->state_.compare_exchange_strong(expected, estate::stopped)) {
-				//cbfunc_->call(Event::stop);
-			}
-			else
-				NET_ASSERT(false);
-
-            return;
-        }
-
-		inline session_ptr_type make_session() {
-			auto& cio = this->iopool_.get();
-#if defined(BNET_ENABLE_SSL)
-			if constexpr (is_ssl_stream<StreamType>) {
-				return std::make_shared<session_type>(this->globalval_, this->cbfunc_, cio, this->max_buffer_size_
-					, cio, asio::ssl::stream_base::client, cio.context(), *this);
-			}
-#endif
-			if constexpr (is_binary_stream<StreamType> || is_kcp_stream<StreamType>) {
-            	return std::make_shared<session_type>(this->globalval_, this->cbfunc_, cio, this->max_buffer_size_, cio.context());
-			}
-		}
-
 		inline bool is_started() const {
 			return (this->state_ == estate::started);
 		}
@@ -146,7 +128,37 @@ namespace bnet::base {
 			return session_ptr_type(this->globalval_.sessions_.find_if(fn));
 		}
 
+		inline session_ptr_type make_session() {
+			auto& cio = this->iopool_.get();
+#if defined(BNET_ENABLE_SSL)
+			if constexpr (is_ssl_stream<StreamType>) {
+				return std::make_shared<session_type>(this->globalval_, this->cbfunc_, cio, this->max_buffer_size_
+					, cio, asio::ssl::stream_base::client, cio.context(), *this);
+			}
+#endif
+			if constexpr (is_binary_stream<StreamType> || is_kcp_stream<StreamType>) {
+            	return std::make_shared<session_type>(this->globalval_, this->cbfunc_, cio, this->max_buffer_size_, cio.context());
+			}
+		}
+
         //inline auto self_shared_ptr() { return this->shared_from_this(); }
+	protected:
+		inline void stop_t(const error_code& ec) {
+            set_last_error(ec);
+
+            this->globalval_.sessions_.foreach([this, ec](session_ptr_type& session_ptr) {
+				session_ptr->stop(ec);
+			});
+
+            estate expected = estate::stopping;
+			if (this->state_.compare_exchange_strong(expected, estate::stopped)) {
+				//cbfunc_->call(Event::stop);
+			}
+			else
+				NET_ASSERT(false);
+
+            return;
+        }
 
 		inline auto& globalval() { return globalval_; }
 	protected:
