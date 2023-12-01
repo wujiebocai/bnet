@@ -37,7 +37,7 @@ namespace bnet::base {
 						std::size_t max_buffer_size, Args&&... args)
 			: stream_type(std::forward<Args>(args)...)
             , proto_type(max_buffer_size)
-			, transfer_type(max_buffer_size)
+			, transfer_type(io, max_buffer_size)
 			, cio_(io)
 			, cbfunc_(cbfunc)
 			, globalval_(globalval)

@@ -72,6 +72,8 @@ namespace bnet::beast::http {
 			}
 			handle_func_queue_.clear();
 		}
+
+		inline size_t count() { return handle_func_queue_.size(); }
 	
 	protected:
 		std::deque<handle_func_type> handle_func_queue_;

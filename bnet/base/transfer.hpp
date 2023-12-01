@@ -6,25 +6,27 @@
  */
 #pragma once
 
+#include "base/queue.hpp"
 namespace bnet::base {
     template<class ... Args>
 	class transfer {};
 
 	template<class DriverType, class StreamType, class ProtoType, class SvrOrCli> 
     requires is_tcp_by_stream<StreamType>
-	class transfer<DriverType, StreamType, ProtoType, SvrOrCli> {
+	class transfer<DriverType, StreamType, ProtoType, SvrOrCli> : public buffer_queue {
     public:
         using transfer_type = transfer<DriverType, StreamType, ProtoType, SvrOrCli>;
 	public:
-		transfer(std::size_t max_buffer_size)
-			: derive_(static_cast<DriverType&>(*this))
+		transfer([[maybe_unused]]nio & io, std::size_t max_buffer_size)
+			: buffer_queue(io)
+            , derive_(static_cast<DriverType&>(*this))
 			, buffer_(max_buffer_size) {}
 
 		~transfer() = default;
 
         template<class DataType>
         inline void send(DataType&& data) {
-			asio::co_spawn(this->derive_.cio().context(), co_send(std::move(data)), asio::detached);
+            this->enqueue(std::forward<DataType>(data));
 		}
 
         template<class DataType>
@@ -57,21 +59,33 @@ namespace bnet::base {
 
     protected:
         inline void recv() {
-			asio::co_spawn(this->derive_.cio().context(), [this, self = this->derive_.self_shared_ptr()] () -> asio::awaitable<void> { 
-                if (auto ec = co_await this->recv_t(); ec) {
-                    co_await this->derive_.co_stop(ec);
-                }
-                co_return; 
-            }, asio::detached);
+            asio::co_spawn(this->derive_.cio().context(), send_t(), asio::detached);
+			asio::co_spawn(this->derive_.cio().context(), recv_t(), asio::detached);
 		}
 
-        asio::awaitable<error_code> recv_t() {
+        inline asio::awaitable<void> send_t() {
+            error_code rec;
+            try {
+                while (this->derive_.is_started()) {
+                    co_await this->dequeue(*this);
+                }
+            }
+            catch (system_error& e) {
+                rec = e.code();
+            }
+            if (rec) {
+                co_await this->derive_.co_stop(rec);
+            }
+        }
+
+        asio::awaitable<void> recv_t() {
+            error_code rec;
             try {
                 while (this->derive_.is_started()) {
                     //auto [ec, nrecv] = co_await this->derive_.stream().async_read_some(this->buffer_);
                     auto [ec, nrecv] = co_await asio::async_read(this->derive_.socket(), this->buffer_, asio::transfer_at_least(1), asio::as_tuple(asio::use_awaitable));
                     if (ec) {
-                        co_return ec;
+                        asio::detail::throw_error(ec);
                     }
 
                     if (nrecv <= 0) continue;
@@ -83,9 +97,11 @@ namespace bnet::base {
                 }
             }
             catch (system_error& e) {
-                co_return e.code();
+                rec = e.code();
             }
-            co_return ec_ignore;
+            if (rec) {
+                co_await this->derive_.co_stop(rec);
+            }
         }
 
         inline void handle_recv(error_code ec, const std::string_view& s) {
@@ -101,19 +117,20 @@ namespace bnet::base {
 
     template<class DriverType, class StreamType, class ProtoType, class SvrOrCli> 
     requires is_udp_by_stream<StreamType>
-	class transfer<DriverType, StreamType, ProtoType, SvrOrCli> {
+	class transfer<DriverType, StreamType, ProtoType, SvrOrCli> : public buffer_queue {
     public:
         using transfer_type = transfer<DriverType, StreamType, ProtoType, SvrOrCli>;
 	public:
-		transfer([[maybe_unused]] std::size_t max_buffer_size)
-			: derive_(static_cast<DriverType&>(*this))
+		transfer([[maybe_unused]]nio & io, [[maybe_unused]] std::size_t max_buffer_size)
+			: buffer_queue(io)
+            , derive_(static_cast<DriverType&>(*this))
 			, buffer_() {}
 
 		~transfer() = default;
 
         template<class DataType>
         inline void send(DataType&& data) {
-			asio::co_spawn(this->derive_.cio().context(), co_send(std::move(data)), asio::detached);
+			this->enqueue(std::forward<DataType>(data));
 		}
 
         template<class DataType>
@@ -217,15 +234,27 @@ namespace bnet::base {
 		}
     protected:
         inline void recv() {
-			asio::co_spawn(this->derive_.cio().context(), [this, self = this->derive_.self_shared_ptr()]() -> asio::awaitable<void> { 
-                if (auto ec = co_await this->recv_t(); ec) {
-                    co_await this->derive_.co_stop(ec);
-                }
-                co_return; 
-            }, asio::detached);
+            asio::co_spawn(this->derive_.cio().context(), send_t(), asio::detached);
+			asio::co_spawn(this->derive_.cio().context(), recv_t(), asio::detached);
 		}
+
+        inline asio::awaitable<void> send_t() {
+            error_code rec;
+            try {
+                while (this->derive_.is_started()) {
+                    co_await this->dequeue(*this);
+                }
+            }
+            catch (system_error& e) {
+                rec = e.code();
+            }
+            if (rec) {
+                co_await this->derive_.co_stop(rec);
+            }
+        }
         
-		inline asio::awaitable<error_code> recv_t() requires is_cli_c<SvrOrCli> {
+		inline asio::awaitable<void> recv_t() requires is_cli_c<SvrOrCli> {
+            error_code rec;
             try {
                 while (this->derive_.is_started()) {
                     //this->buffer_.wr_reserve(init_buffer_size_);
@@ -233,7 +262,7 @@ namespace bnet::base {
                     auto [ec, nrecv] = co_await this->derive_.socket().async_receive(asio::mutable_buffer(this->buffer_.wr_buf(), this->buffer_.wr_size()), 
                                             asio::as_tuple(asio::use_awaitable));
                     if (ec) {
-                        co_return ec;
+                        asio::detail::throw_error(ec);
                     }
 
                     if (nrecv <= 0) continue;
@@ -245,13 +274,14 @@ namespace bnet::base {
                 }
             }
             catch (system_error& e) {
-                co_return e.code();
+                rec = e.code();
             }
-
-            co_return ec_ignore;
+            if (rec) {
+                co_await this->derive_.co_stop(rec);
+            }
 		}
 
-        inline asio::awaitable<error_code> recv_t() requires is_svr_c<SvrOrCli> {
+        inline asio::awaitable<void> recv_t() requires is_svr_c<SvrOrCli> {
             auto blen = this->buffer_.rd_size();
             if (blen > 0) {
                 this->handle_recv(ec_ignore, std::string_view(reinterpret_cast<
@@ -259,8 +289,7 @@ namespace bnet::base {
 
                 this->buffer_.reset();
             }
-
-            co_return ec_ignore;
+            co_return;
         }
 
     protected:
@@ -275,39 +304,44 @@ namespace bnet::base {
 #if defined(BNET_ENABLE_HTTP)
     template<class DriverType, class StreamType, class ProtoType, class SvrOrCli> 
     requires is_http_proto<ProtoType> && is_tcp_by_stream<StreamType>
-	class transfer<DriverType, StreamType, ProtoType, SvrOrCli> {
+	class transfer<DriverType, StreamType, ProtoType, SvrOrCli> : public normal_queue {
     public:
         using transfer_type = transfer<DriverType, StreamType, ProtoType, SvrOrCli>;
 	public:
-		transfer([[maybe_unused]] std::size_t max_buffer_size)
-			: derive_(static_cast<DriverType&>(*this))
+		transfer([[maybe_unused]]nio & io, [[maybe_unused]] std::size_t max_buffer_size)
+			: normal_queue(io)
+            , derive_(static_cast<DriverType&>(*this))
             , rbuff_(max_buffer_size) { }
 
 		~transfer() = default;
 
         template<class DataType>
         inline void send(DataType&& data) {
-            asio::co_spawn(this->derive_.cio().context(), co_send(std::move(data)), asio::detached);
+            if constexpr (is_c_str_c<DataType>) {
+                this->enqueue([this, self = this->derive_.self_shared_ptr(), data = asio::buffer(std::move(data))]() -> asio::awaitable<size_t> {
+                    return co_send(std::move(data));
+                });
+            }
+            else {
+                this->enqueue([this, self = this->derive_.self_shared_ptr(), data = std::move(data)]() -> asio::awaitable<size_t> {
+                    return co_send(std::move(data));
+                });
+            }
 		}
 
         template<class DataType, class HandleFunc>
         inline void send(DataType&& data, HandleFunc&& f) {
-            //asio::co_spawn(this->derive_.cio().context(), [this, self = this->derive_.self_shared_ptr(), data = std::move(data), f = std::move(f)]() -> asio::awaitable<size_t> { 
-            //    this->derive_.cli_router().handle_func(std::move(f));
-            //    return co_send(std::move(data));
-            //}, asio::detached);
-
             if constexpr (is_c_str_c<DataType>) {
-                asio::co_spawn(this->derive_.cio().context(), [this, self = this->derive_.self_shared_ptr(), data = std::string(std::move(data)), f = std::move(f)]() -> asio::awaitable<size_t> { 
+                this->enqueue([this, self = this->derive_.self_shared_ptr(), data = asio::buffer(std::move(data)), f = std::move(f)]() -> asio::awaitable<size_t> {
                     this->derive_.cli_router().handle_func(std::move(f));
                     return co_send(std::move(data));
-                }, asio::detached);
+                });
             }
             else {
-                asio::co_spawn(this->derive_.cio().context(), [this, self = this->derive_.self_shared_ptr(), data = std::move(data), f = std::move(f)]() -> asio::awaitable<size_t> { 
+                this->enqueue([this, self = this->derive_.self_shared_ptr(), data = std::move(data), f = std::move(f)]() -> asio::awaitable<size_t> {
                     this->derive_.cli_router().handle_func(std::move(f));
                     return co_send(std::move(data));
-                }, asio::detached);
+                });
             }
 		}
 
@@ -422,13 +456,24 @@ namespace bnet::base {
 
     protected:
         inline void recv() {
-			asio::co_spawn(this->derive_.cio().context(), [this, self = this->derive_.self_shared_ptr()]() -> asio::awaitable<void> { 
-                if (auto ec = co_await this->recv_t(); ec) {
-                    co_await this->derive_.co_stop(ec);
-                }
-                co_return; 
-            }, asio::detached);
+            asio::co_spawn(this->derive_.cio().context(), send_t(), asio::detached);
+            asio::co_spawn(this->derive_.cio().context(), recv_t(), asio::detached);
 		}
+
+        inline asio::awaitable<void> send_t() {
+            error_code rec;
+            try {
+                while (this->derive_.is_started()) {
+                    co_await this->dequeue();
+                }
+            }
+            catch (system_error& e) {
+                rec = e.code();
+            }
+            if (rec) {
+                co_await this->derive_.co_stop(rec);
+            }
+        }
 
         template<bool IsRequest, class Body, class Fields>
 		inline void check_http_message_t(const http::message<IsRequest, Body, Fields>& msg) {
@@ -442,7 +487,8 @@ namespace bnet::base {
 			}
 		}
 
-        inline asio::awaitable<error_code> recv_t() requires is_svr_c<SvrOrCli> {
+        inline asio::awaitable<void> recv_t() requires is_svr_c<SvrOrCli> {
+            error_code rec;
             try {
                 set_rsp_refresh();
 
@@ -453,7 +499,7 @@ namespace bnet::base {
                     auto [ec, nrecv] = co_await http::async_read(this->derive_.socket(), rbuff_, req_,
                                             asio::as_tuple(asio::use_awaitable));
                     if (ec) {
-                        co_return ec;
+                        asio::detail::throw_error(ec);
                     }
 
                     std::string_view target = this->req_.target();
@@ -471,13 +517,15 @@ namespace bnet::base {
                 }
             }
             catch (system_error& e) {
-                co_return e.code();
+                rec = e.code();
             }
-
-            co_return ec_ignore;
+            if (rec) {
+                co_await this->derive_.co_stop(rec);
+            }
 		}
 
         inline asio::awaitable<error_code> recv_t() requires is_cli_c<SvrOrCli> {
+            error_code rec;
             try {
                 while (this->derive_.is_started()) {
                     // Make the request empty before reading,
@@ -490,15 +538,16 @@ namespace bnet::base {
                     this->handle_recv_c(ec);
 
                     if (ec) {
-                        co_return ec;
+                        asio::detail::throw_error(ec);
                     }
                 }
             }
             catch (system_error& e) {
-                co_return e.code();
+                rec = e.code();
             }
-
-            co_return ec_ignore;
+            if (rec) {
+                co_await this->derive_.co_stop(rec);
+            }
 		}
 
         inline asio::awaitable<void> handle_recv_s() {
@@ -547,21 +596,23 @@ namespace bnet::base {
 #if defined(BNET_ENABLE_HTTP)
     template<class DriverType, class StreamType, class ProtoType, class SvrOrCli> 
     requires is_ws_proto<ProtoType> && is_tcp_by_stream<StreamType>
-	class transfer<DriverType, StreamType, ProtoType, SvrOrCli> {
+	class transfer<DriverType, StreamType, ProtoType, SvrOrCli> : public buffer_queue {
     public:
         using transfer_type = transfer<DriverType, StreamType, ProtoType, SvrOrCli>;
 	public:
-		transfer([[maybe_unused]] std::size_t max_buffer_size)
-			: derive_(static_cast<DriverType&>(*this)) {}
+		transfer([[maybe_unused]]nio & io, [[maybe_unused]] std::size_t max_buffer_size)
+			: buffer_queue(io)
+            , derive_(static_cast<DriverType&>(*this)) {}
 
 		~transfer() = default;
 
         template<class DataType>
         inline void send(DataType&& data) {
-            asio::co_spawn(this->derive_.cio().context(), co_send(std::move(data)), asio::detached);
+            this->enqueue(std::forward<DataType>(data));
 		}
 
-        template<is_string_like_or_constructible_c DataType>
+        //template<is_string_like_or_constructible_c DataType>
+        template<class DataType>
         asio::awaitable<size_t> co_send(DataType&& data) {
             error_code rec;
             try {
@@ -585,7 +636,7 @@ namespace bnet::base {
 
             co_return 0;
         }
-
+/*
         template<bool IsRequest, class Body, class Fields>
         asio::awaitable<size_t> co_send(http::message<IsRequest, Body, Fields>& data) {
             error_code rec;
@@ -623,23 +674,36 @@ namespace bnet::base {
 		inline asio::awaitable<size_t> co_send(http::http_response_impl_t<Body, Fields>& data) {
 			return this->co_send(data.base());
 		}
+*/
     protected:
         inline void recv() {
-			asio::co_spawn(this->derive_.cio().context(), [this, self = this->derive_.self_shared_ptr()]() -> asio::awaitable<void> { 
-                if (auto ec = co_await this->recv_t(); ec) {
-                    co_await this->derive_.co_stop(ec);
-                }
-                co_return; 
-            }, asio::detached);
+            asio::co_spawn(this->derive_.cio().context(), send_t(), asio::detached);
+			asio::co_spawn(this->derive_.cio().context(), recv_t(), asio::detached);
 		}
 
+        inline asio::awaitable<void> send_t() {
+            error_code rec;
+            try {
+                while (this->derive_.is_started()) {
+                    co_await this->dequeue(*this);
+                }
+            }
+            catch (system_error& e) {
+                rec = e.code();
+            }
+            if (rec) {
+                co_await this->derive_.co_stop(rec);
+            }
+        }
+
         inline asio::awaitable<error_code> recv_t() {
+            error_code rec;
             try {
                 auto& buffer = this->derive_.ws_buffer();
                 while (this->derive_.is_started()) {
                     auto [ec, nrecv] = co_await this->derive_.stream().async_read(buffer, asio::as_tuple(asio::use_awaitable));
                     if (ec) {
-                        co_return ec;
+                        asio::detail::throw_error(ec);
                     }
 
                     // bytes_recvd : The number of bytes in the streambuf's get area up to and including the delimiter.
@@ -652,10 +716,11 @@ namespace bnet::base {
                 }
             }
             catch (system_error& e) {
-                co_return e.code();
+                rec = e.code();
             }
-
-            co_return ec_ignore;
+            if (rec) {
+                co_await this->derive_.co_stop(rec);
+            }
 		}
 
         inline void handle_recv(error_code ec, const std::string_view& s) {
@@ -671,19 +736,20 @@ namespace bnet::base {
 
     template<class DriverType, class StreamType, class ProtoType, class SvrOrCli> 
     requires is_kcp_stream<StreamType> && is_udp_by_stream<StreamType>
-	class transfer<DriverType, StreamType, ProtoType, SvrOrCli> {
+	class transfer<DriverType, StreamType, ProtoType, SvrOrCli> : public buffer_queue {
     public:
         using transfer_type = transfer<DriverType, StreamType, ProtoType, SvrOrCli>;
 	public:
-		transfer([[maybe_unused]] std::size_t max_buffer_size)
-			: derive_(static_cast<DriverType&>(*this))
+		transfer([[maybe_unused]]nio & io, [[maybe_unused]] std::size_t max_buffer_size)
+			: buffer_queue(io)
+            , derive_(static_cast<DriverType&>(*this))
 			, buffer_() {}
 
 		~transfer() = default;
 
         template<class DataType>
         inline void send(DataType&& data) {
-			asio::co_spawn(this->derive_.cio().context(), co_send(std::move(data)), asio::detached);
+            this->enqueue(std::forward<DataType>(data));
 		}
 
         template<class DataType>
@@ -739,12 +805,8 @@ namespace bnet::base {
 		}
     protected:
         inline void recv() {
-			asio::co_spawn(this->derive_.cio().context(), [this, self = this->derive_.self_shared_ptr()]() -> asio::awaitable<void> { 
-                if (auto ec = co_await this->recv_t(); ec) {
-                    co_await this->derive_.co_stop(ec);
-                }
-                co_return; 
-            }, asio::detached);
+            asio::co_spawn(this->derive_.cio().context(), send_t(), asio::detached);
+			asio::co_spawn(this->derive_.cio().context(), recv_t(), asio::detached);
 		}
 /*
         template<class Buffer>
@@ -767,7 +829,23 @@ namespace bnet::base {
 			return std::size_t(ret);
 		}
 */      
-		inline asio::awaitable<error_code> recv_t() requires is_cli_c<SvrOrCli> {
+        inline asio::awaitable<void> send_t() {
+            error_code rec;
+            try {
+                while (this->derive_.is_started()) {
+                    co_await this->dequeue(*this);
+                }
+            }
+            catch (system_error& e) {
+                rec = e.code();
+            }
+            if (rec) {
+                co_await this->derive_.co_stop(rec);
+            }
+        }
+
+		inline asio::awaitable<void> recv_t() requires is_cli_c<SvrOrCli> {
+            error_code rec;
             try {
                 while (this->derive_.is_started()) {
                     //this->buffer_.wr_reserve(init_buffer_size_);
@@ -775,7 +853,7 @@ namespace bnet::base {
                     auto [ec, nrecv] = co_await this->derive_.socket().async_receive(asio::mutable_buffer(this->buffer_.wr_buf(), this->buffer_.wr_size()), 
                                             asio::as_tuple(asio::use_awaitable));
                     if (ec) {
-                        co_return ec;
+                        asio::detail::throw_error(ec);
                     }
 
                     if (nrecv <= 0) continue;
@@ -787,15 +865,16 @@ namespace bnet::base {
                     ec = this->handle_recv(ec, std::string_view(reinterpret_cast<
 						std::string_view::const_pointer>(this->buffer_.rd_buf()), nrecv));
                     if (ec) {
-                        co_return ec;
+                        asio::detail::throw_error(ec);
                     }
                 }
             }
             catch (system_error& e) {
-                co_return e.code();
+                rec = e.code();
             }
-
-            co_return ec_ignore;
+            if (rec) {
+                co_await this->derive_.co_stop(rec);
+            }
 		}
 
         inline asio::awaitable<error_code> recv_t() requires is_svr_c<SvrOrCli> {
@@ -807,10 +886,11 @@ namespace bnet::base {
 
             auto ec = this->handle_recv(ec_ignore, std::string_view(reinterpret_cast<
 				std::string_view::const_pointer>(this->buffer_.rd_buf()), this->buffer_.rd_size()));
+            if (ec) {
+                co_await this->derive_.co_stop(ec);
+            }
 
             this->buffer_.reset();
-
-            co_return ec;
         }
 
     protected:

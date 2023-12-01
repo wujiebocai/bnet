@@ -149,7 +149,7 @@ void tcp_tst() {
     //cli
     static auto tcpcli = cli_proxy<tcp_cli>(5);
     tcpcli.start();
-    for (int i = 0; i < 44; ++i) {
+    for (int i = 0; i < 100; ++i) {
         tcpcli.add("127.0.0.1", "8888");
     }
 	//std::this_thread::sleep_for(std::chrono::milliseconds(2000));
@@ -180,7 +180,7 @@ void kcp_tst() {
     //cli
     static auto kcp_cli_ptr = std::make_shared<cli_proxy<kcp_cli>>(5);
     kcp_cli_ptr->start();
-    for (int i = 0; i < 44; ++i) {
+    for (int i = 0; i < 1000; ++i) {
         kcp_cli_ptr->add("127.0.0.1", "8585");
     }
 #endif
@@ -215,7 +215,7 @@ void http_tst() {
 	*/
 	std::string_view msg("GET /api/user/tt HTTP/1.1\r\n\r\n");
 	for (int i = 0; i < 100000; ++i) {
-	http_cli_ptr->execute("GET /api/user/tt HTTP/1.1\r\n\r\n", [start_time]([[maybe_unused]]const error_code& ec, http::web_response& rep) mutable {
+	http_cli_ptr->execute(msg, [start_time]([[maybe_unused]]const error_code& ec, http::web_response& rep) mutable {
 		//std::cout << "client:" << rep << std::endl;
 		if (ec) {
 			std::cout << "errmsg: " << ec.message() << std::endl;
@@ -227,7 +227,7 @@ void http_tst() {
 			std::cout << "======================================================= " << httpcount << " " << (end_time - start_time) << std::endl;
 		}
 	});
-	http_cli_ptr->execute("GET /api/user/tt HTTP/1.1\r\n\r\n", [start_time]([[maybe_unused]]const error_code& ec, [[maybe_unused]]http::web_response& rep) {
+	http_cli_ptr->execute(msg, [start_time]([[maybe_unused]]const error_code& ec, [[maybe_unused]]http::web_response& rep) {
 		//std::cout << "client2:" << rep << std::endl;
 		if (ec) {
 			std::cout << "errmsg: " << ec.message() << std::endl;
@@ -240,7 +240,7 @@ void http_tst() {
 		}
 	});
 
-	http_cli_ptr->execute("GET /api/user/tt HTTP/1.1\r\n\r\n", [start_time]([[maybe_unused]]const error_code& ec, [[maybe_unused]]http::web_response& rep) {
+	http_cli_ptr->execute(msg, [start_time]([[maybe_unused]]const error_code& ec, [[maybe_unused]]http::web_response& rep) {
 		//std::cout << "client3:" << rep << std::endl;
 		//std::cout << "client3:" << rep.body().text() << std::endl;
 		if (ec) {
@@ -266,7 +266,7 @@ void ws_tst() {
 	//cli
 	static auto ws_cli_ptr = std::make_shared<cli_proxy<ws_cli>>(5);
 	ws_cli_ptr->start();
-	for (int i = 0; i < 44; ++i) {
+	for (int i = 0; i < 100; ++i) {
 		ws_cli_ptr->add("127.0.0.1", "8888");
 	}
 #endif

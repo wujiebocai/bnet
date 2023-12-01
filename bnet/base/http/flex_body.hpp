@@ -90,7 +90,7 @@ public:
 
     /// Assignment
     value_type& operator=(value_type const& o) {
-        this->text_ = o.text_;
+        this->text_.operator=(o.text_);
         this->file_.operator=(o.file_);
 
         return *this;
@@ -98,7 +98,7 @@ public:
 
     /// Move assignment
     value_type& operator=(value_type&& o) {
-        this->text_ = o.text_;
+        this->text_.operator=(std::move(o.text_));
         this->file_.operator=(std::move(o.file_));
 
         return *this;

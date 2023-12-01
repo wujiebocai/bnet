@@ -90,6 +90,7 @@ namespace bnet::base {
 		}
 
 		inline session_ptr rand_get() {
+			std::unique_lock<std::shared_mutex> guard(this->mutex_);
 			if (sessions_.size() <= 0) {
 				return session_ptr();
 			}
