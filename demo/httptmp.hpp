@@ -80,6 +80,9 @@ public:
 		});
 		this->bind(event::disconnect, []([[maybe_unused]]session_ptr_type& ptr, error_code ec) {
 			std::cout << "http disconnect client" << ec.message() << std::endl;
+			if (ec) {
+				ptr->reconn();
+			}
 		});
 		this->bind(event::recv, []([[maybe_unused]]session_ptr_type& ptr, http::web_request& req, http::web_response& rep) {
 			std::ignore = req;

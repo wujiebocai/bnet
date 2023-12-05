@@ -55,8 +55,9 @@ namespace bnet::tool {
             return add_route(root_, path, func);
         }
 
-        inline std::shared_ptr<node_value> get(const std::string& path, std::vector<param>* params, std::vector<skipped_node>& skipped_nodes, bool unescape) {
-            return std::make_shared<node_value>(std::move(get_value(root_, path, params, skipped_nodes, unescape)));
+        inline node_value get(const std::string& path, std::vector<param>* params, std::vector<skipped_node>& skipped_nodes, bool unescape) {
+            //return std::make_shared<node_value>(std::move(get_value(root_, path, params, skipped_nodes, unescape)));
+            return std::move(get_value(root_, path, params, skipped_nodes, unescape));
         }
 
         std::string find_case_insensitive_path(const std::string& path, bool fixTrailingSlash) {

@@ -128,7 +128,7 @@ namespace bnet::base {
 				//if (auto ec = co_await this->recv_t(); ec) {
 				//	asio::detail::throw_error(ec);
 				//}
-				this->recv();
+				this->transfer_start();
 				
 				co_return ec_ignore;
 			}
@@ -153,6 +153,8 @@ namespace bnet::base {
 				if (this->state_.compare_exchange_strong(expected_starting, estate::stopping) ||
 					this->state_.compare_exchange_strong(expected_started, estate::stopping)) {
 					this->user_data_reset();
+
+					this->transfer_stop();
 
 					auto dptr = this->shared_from_this();
 					bool isremove = this->globalval_.sessions_.erase(dptr);

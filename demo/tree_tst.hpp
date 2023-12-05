@@ -71,9 +71,9 @@ void check_request(redix_tree& tree, std::vector<requests> tstreq, bool unescape
     for (auto &&req : tstreq) {
         std::vector<redix_tree::param> params;
 		std::vector<redix_tree::skipped_node> skipped_nodes;
-        auto valueptr = tree.get(req.path, &params, skipped_nodes, unescapes);
+        auto value = tree.get(req.path, &params, skipped_nodes, unescapes);
 
-        if (valueptr->handlers_ == nullptr) {
+        if (value.handlers_ == nullptr) {
             if (!req.nilHandle) {
                 std::cerr << "handle mismatch for route " << req.path << " : Expected non-ps handle" << std::endl;
             } 
@@ -82,15 +82,15 @@ void check_request(redix_tree& tree, std::vector<requests> tstreq, bool unescape
             std::cerr << "handle mismatch for route " << req.path << "Expected ps handle 1" << std::endl;
         }
         else {
-            auto ret = valueptr->handlers_();
+            auto ret = value.handlers_();
 			count++;
 			std::cout << ret << " : " << req.route << ", " << count << std::endl;
             if (ret != req.route) {
                 std::cerr << "handle mismatch for route " << req.path << ", " << req.route << ", " << ret << std::endl;
             }
         }
-        if (valueptr->params_ != nullptr) {
-            if (valueptr->params_->size() != req.ps.size()) {
+        if (value.params_ != nullptr) {
+            if (value.params_->size() != req.ps.size()) {
                 std::cerr << "Params mismatch for route " << req.path << std::endl;
 
             }

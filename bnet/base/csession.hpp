@@ -41,7 +41,6 @@ namespace bnet::base {
 			, cio_(io)
 			, cbfunc_(cbfunc)
 			, globalval_(globalval)
-            , ctimer_(io.context())
 		{
 		}
 
@@ -132,9 +131,10 @@ namespace bnet::base {
 			    }
 
 				//cbfunc_->call(event::init);
-
-                this->ctimer_.expires_after(std::chrono::milliseconds(3000));
-                std::variant<error_code, std::monostate> rets = co_await (this->template co_connect<IsKeepAlive>(host, port) || this->ctimer_.async_wait(asio::use_awaitable));
+				asio::steady_timer ctimer(cio_.context());
+                ctimer.expires_after(std::chrono::milliseconds(3000));
+                std::variant<error_code, std::monostate> rets = co_await (this->template co_connect<IsKeepAlive>(host, port) || ctimer.async_wait(asio::use_awaitable));
+				ctimer.cancel();
                 auto idx = rets.index();
                 if (idx == 0) {
                     error_code ret = std::get<0>(rets);
@@ -167,7 +167,7 @@ namespace bnet::base {
 					//if (auto ec = co_await this->recv_t(); ec) { // sync will block
 					//	asio::detail::throw_error(ec);
 					//}
-					this->recv();
+					this->transfer_start();
 					
                     co_return ec_ignore;
                 }
@@ -202,8 +202,9 @@ namespace bnet::base {
 			    if (this->state_.compare_exchange_strong(expected_starting, estate::stopping) ||
 			    	this->state_.compare_exchange_strong(expected_started, estate::stopping)) {
                     //set_last_error(ec);
-                    this->ctimer_.cancel();
                     this->user_data_reset();
+
+					this->transfer_stop();
 
 					auto dptr = this->shared_from_this();
                     bool isremove = this->globalval_.sessions_.erase(dptr);
@@ -310,8 +311,6 @@ namespace bnet::base {
 
 		func_proxy_imp_ptr& cbfunc_;
 		globalval_type& globalval_;
-
-		asio::steady_timer ctimer_;
 		
 		std::atomic<estate> state_ = estate::stopped;
 

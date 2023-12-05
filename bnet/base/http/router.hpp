@@ -23,9 +23,9 @@ namespace bnet::beast::http {
 			return routers_[size_t(method) - 1].add(path, std::forward<handle_func_type>(func));
 		}
 
-		inline auto handle(http::verb method, const std::string& path) {
+		inline std::optional<redix_tree_type::node_value> handle(http::verb method, const std::string& path) {
 			if (method <= http::verb::unknown || method > http::verb::unlink) {
-				return std::shared_ptr<typename redix_tree_type::node_value>();
+				return std::nullopt;
 			}
 
 			this->params_.clear();
@@ -51,21 +51,21 @@ namespace bnet::beast::http {
 		}
 
 		template<class ... Args>
-		inline void handle(Args&&... args) {
-			if (handle_func_queue_.size() <= 0) {
-				return;
+		inline bool handle(Args&&... args) {
+			if (handle_func_queue_.empty()) {
+				return false;
 			}
-			auto func = handle_func_queue_.back();
+			auto& func = handle_func_queue_.back();
 			if (func) {
 				func(std::forward<Args>(args)...);
 			}
 			handle_func_queue_.pop_back();
-			return;
+			return true;
 		}
 
 		template<class ... Args>
 		inline void handle_all(Args&&... args) {
-			for (auto f : handle_func_queue_) {
+			for (auto& f : handle_func_queue_) {
 				if (f) {
 					f(std::forward<Args>(args)...);
 				}
@@ -73,7 +73,7 @@ namespace bnet::beast::http {
 			handle_func_queue_.clear();
 		}
 
-		inline size_t count() { return handle_func_queue_.size(); }
+		inline size_t size() { return handle_func_queue_.size(); }
 	
 	protected:
 		std::deque<handle_func_type> handle_func_queue_;

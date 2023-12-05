@@ -196,7 +196,7 @@ void http_tst() {
 	//cli
 	static auto http_cli_ptr = std::make_shared<http_cli_proxy<http_cli>>(3);
 	http_cli_ptr->start();
-	for (int i = 0; i < 1; ++i) {
+	for (int i = 0; i < 16; ++i) {
 		http_cli_ptr->add<false>("127.0.0.1", "18888");
 	}
 	auto start_time = get_cur_time();
@@ -217,8 +217,9 @@ void http_tst() {
 	for (int i = 0; i < 100000; ++i) {
 	http_cli_ptr->execute(msg, [start_time]([[maybe_unused]]const error_code& ec, http::web_response& rep) mutable {
 		//std::cout << "client:" << rep << std::endl;
+		std::ignore = rep;
 		if (ec) {
-			std::cout << "errmsg: " << ec.message() << std::endl;
+			std::cout << "errmsg: " << ec.message() << ", " << httpcount << std::endl;
 		}
 
 		httpcount.fetch_add(1);
@@ -229,8 +230,9 @@ void http_tst() {
 	});
 	http_cli_ptr->execute(msg, [start_time]([[maybe_unused]]const error_code& ec, [[maybe_unused]]http::web_response& rep) {
 		//std::cout << "client2:" << rep << std::endl;
+		std::ignore = rep;
 		if (ec) {
-			std::cout << "errmsg: " << ec.message() << std::endl;
+			std::cout << "errmsg: " << ec.message() << ", " << httpcount << std::endl;
 		}
 
 		httpcount.fetch_add(1);
@@ -243,8 +245,9 @@ void http_tst() {
 	http_cli_ptr->execute(msg, [start_time]([[maybe_unused]]const error_code& ec, [[maybe_unused]]http::web_response& rep) {
 		//std::cout << "client3:" << rep << std::endl;
 		//std::cout << "client3:" << rep.body().text() << std::endl;
+		std::ignore = rep;
 		if (ec) {
-			std::cout << "errmsg: " << ec.message() << std::endl;
+			std::cout << "errmsg: " << ec.message() << ", " << httpcount << std::endl;
 		}
 
 		httpcount.fetch_add(1);
@@ -308,7 +311,7 @@ void wss_tst() {
 void timer_tst() {
 	int count = 0;
 	static bnet::Timer timer(g_context_);
-	timer.start(std::chrono::seconds(5), [count](std::error_code& ec) mutable {
+	timer.start(std::chrono::seconds(5), [count](const std::error_code& ec) mutable {
 		if (ec) {
 			std::cerr << "err: " << ec.message() << std::endl;
 		}
@@ -334,7 +337,7 @@ void route_tst() {
 
 //int main(int argc, char * argv[]) {
 int main() {
-	kcp_tst();
+	tcp_tst();
 	std::cout << "ssssssssssssssstop" << std::endl;
 
 	asio::signal_set signals(g_context_, SIGINT, SIGTERM);

@@ -22,7 +22,7 @@ namespace bnet::base {
     }
 
     template<class Fn>
-    concept is_timer_func = std::is_invocable_r<void, Fn, std::error_code&>::value || std::is_invocable_r<bool, Fn, std::error_code&>::value;
+    concept is_timer_func = std::is_invocable_r<void, Fn, const std::error_code&>::value || std::is_invocable_r<bool, Fn, const std::error_code&>::value;
 
     class Timer {
 	public:
@@ -52,7 +52,12 @@ namespace bnet::base {
 				return this->template start_t<IsLoop>(interval, f);
 			}, asio::detached);
 		}
-
+        
+        inline void stop() {
+			this->timer_canceled_.test_and_set();
+			this->timer_.cancel();
+		}
+    protected:
         template<bool IsLoop = true, is_timer_func Fn, class Rep, class Period>
         inline asio::awaitable<void> start_t(std::chrono::duration<Rep, Period> interval, Fn&& f) {
             while (IsLoop) {
@@ -77,20 +82,17 @@ namespace bnet::base {
             }
         }
 
-		inline void stop() {
-			this->timer_canceled_.test_and_set();
-			this->timer_.cancel();
-		}
-
 	protected:
 		asio::io_context& ctx_;
 
 		asio::steady_timer timer_;
 
 		std::atomic_flag timer_canceled_ = ATOMIC_FLAG_INIT;
-
-		//std::chrono::milliseconds interval_ = std::chrono::minutes(60);
-
-		//std::chrono::time_point<std::chrono::system_clock> active_time_ = std::chrono::system_clock::now();
 	};
+
+    template<is_timer_func Fn, class Rep, class Period>
+    void reset_timer(asio::steady_timer& timer, std::chrono::duration<Rep, Period> interval, Fn&& f) {
+        timer.expires_after(interval);
+        timer.async_wait(f);
+    }
 }
