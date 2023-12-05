@@ -196,7 +196,7 @@ void http_tst() {
 	//cli
 	static auto http_cli_ptr = std::make_shared<http_cli_proxy<http_cli>>(3);
 	http_cli_ptr->start();
-	for (int i = 0; i < 16; ++i) {
+	for (int i = 0; i < 8; ++i) {
 		http_cli_ptr->add<false>("127.0.0.1", "18888");
 	}
 	auto start_time = get_cur_time();
@@ -337,7 +337,7 @@ void route_tst() {
 
 //int main(int argc, char * argv[]) {
 int main() {
-	tcp_tst();
+	http_tst();
 	std::cout << "ssssssssssssssstop" << std::endl;
 
 	asio::signal_set signals(g_context_, SIGINT, SIGTERM);

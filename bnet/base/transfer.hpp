@@ -6,7 +6,11 @@
  */
 #pragma once
 
+#include "asio/experimental/awaitable_operators.hpp"
 #include "base/queue.hpp"
+
+using namespace asio::experimental::awaitable_operators;
+
 namespace bnet::base {
     template<class ... Args>
 	class transfer {};
@@ -334,6 +338,28 @@ namespace bnet::base {
             }
 		}
 
+#if defined(BNET_HTTP_NOPIPELINE)
+        template<class DataType, class HandleFunc>
+        inline void send(DataType&& data, HandleFunc&& f) requires is_cli_c<SvrOrCli> {
+            this->enqueue([this, data = std::move(data), f = std::move(f)]() -> asio::awaitable<error_code> {
+                timer_.expires_after(std::chrono::seconds(3));
+                std::variant<error_code, std::monostate> rets = co_await (this->co_send_recv(std::move(data)) || timer_.async_wait(asio::use_awaitable));
+                timer_.cancel();
+
+                error_code ec;
+                switch (rets.index()) {
+                case 0: ec = std::get<0>(rets); break;
+                case 1: ec = asio::error::timed_out; break;
+                //case std::variant_npos: ec = asio::error::operation_aborted; break;
+                default: ec = asio::error::operation_aborted; break;
+                }
+
+                f(ec, rep_);
+                if (ec) co_await this->derive_.co_stop(ec);
+                co_return ec;
+            });
+		}
+#else
         template<class DataType, class HandleFunc>
         inline void send(DataType&& data, HandleFunc&& f) {
             if constexpr (is_c_str_c<DataType>) {
@@ -370,6 +396,7 @@ namespace bnet::base {
                 this->derive_.stop(asio::error::timed_out);
             });
 		}
+#endif
 
         template<is_string_like_or_constructible_c Data>
         asio::awaitable<error_code> co_send(Data&& data) {
@@ -426,47 +453,37 @@ namespace bnet::base {
             co_return rec;
 		}
 
-		template<class Body, class Fields>
-		inline asio::awaitable<error_code> co_send(const http::http_request_impl_t<Body, Fields>& data) {
+		//template<class Body, class Fields>
+		//inline asio::awaitable<error_code> co_send(const http::http_request_impl_t<Body, Fields>& data) {
+        //    return co_send(data.base());
+		//}
+
+		//template<class Body, class Fields>
+		//inline asio::awaitable<error_code> co_send(const http::http_response_impl_t<Body, Fields>& data) {
+        //    return co_send(data.base());
+		//}
+
+#if defined(BNET_HTTP_NOPIPELINE)
+        template<bool IsRequest, class Body, class Fields>
+        inline asio::awaitable<error_code> co_send_recv(const http::message<IsRequest, Body, Fields>& data) requires is_cli_c<SvrOrCli> {
             error_code rec;
             try {
                 if (!this->derive_.is_started())
                     asio::detail::throw_error(asio::error::not_connected);
 
-                check_http_message_t(data.base());
-
-                auto [ec, nsent] = co_await http::async_write(this->derive_.socket(), data.base(), asio::as_tuple(asio::use_awaitable));
-                if (ec) {
-                    asio::detail::throw_error(ec);
-                }
-
-                co_return rec;
-            }
-            catch (system_error& e) {
-                rec = e.code();
-            }
-            catch (std::exception&) { set_last_error(asio::error::eof); }
-            if (rec) {
-                co_await this->derive_.co_stop(rec);
-            }
-
-            co_return rec;
-		}
-
-		template<class Body, class Fields>
-		inline asio::awaitable<error_code> co_send(const http::http_response_impl_t<Body, Fields>& data) {
-            error_code rec;
-            try {
-                if (!this->derive_.is_started())
-                    asio::detail::throw_error(asio::error::not_connected);
-
-                check_http_message_t(data.base());
-
+                check_http_message_t(data);
                 auto [ec, nsent] = co_await http::async_write(this->derive_.socket(), data, asio::as_tuple(asio::use_awaitable));
                 if (ec) {
                     asio::detail::throw_error(ec);
                 }
 
+                this->rep_.reset();
+                auto [rec, nrecv] = co_await http::async_read(this->derive_.socket(), rbuff_, rep_,
+                                        asio::as_tuple(asio::use_awaitable));
+                if (rec) {
+                    asio::detail::throw_error(ec);
+                }
+
                 co_return rec;
             }
             catch (system_error& e) {
@@ -478,14 +495,17 @@ namespace bnet::base {
             }
 
             co_return rec;
-		}
-
+        }
+#endif
     protected:
         inline void transfer_start() {
             normal_queue::init();
             asio::co_spawn(this->derive_.cio().context(), [self = this->derive_.self_shared_ptr()]() -> asio::awaitable<void> { 
 				return self->send_t();
 			}, asio::detached);
+#if defined(BNET_HTTP_NOPIPELINE)
+            if constexpr (is_svr_c<SvrOrCli>) 
+#endif
             asio::co_spawn(this->derive_.cio().context(), [self = this->derive_.self_shared_ptr()]() -> asio::awaitable<void> { 
 				return self->recv_t();
 			}, asio::detached);
