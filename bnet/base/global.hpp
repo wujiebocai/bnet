@@ -11,14 +11,24 @@
 namespace bnet::base {
     // Global environment variable
     template<typename SessionType>
-    struct global_val {
+    struct global_ctx {
+        global_ctx(const svr_cfg& cfg) 
+            : svr_cfg_(cfg)
+            , bind_func_(std::make_shared<BINDFUNCTYPE>()) {}
+        global_ctx(const cli_cfg& cfg) 
+            : cli_cfg_(cfg) 
+            , bind_func_(std::make_shared<BINDFUNCTYPE>()) {}
+
+        const svr_cfg svr_cfg_;
+        const cli_cfg cli_cfg_;
+        const bind_func_ptr_type bind_func_;
+
         session_mgr<SessionType> sessions_;
 
 #if defined(BNET_ENABLE_HTTP)
         using handle_func_type = typename http::http_router::handle_func_type;
-        
         http::http_router router_;
-        
+
         inline bool handle_func(http::verb method, const std::string& path, handle_func_type& func) {
             return router_.handle_func(method, path, func);
         }

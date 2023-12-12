@@ -23,7 +23,7 @@ namespace bnet::base {
 		using stream_type = StreamType;
         using proto_type = ProtoType;
 		using transfer_type = transfer<csession<StreamType, ProtoType>, StreamType, ProtoType, cli_tag>;
-        using globalval_type = global_val<session_type>;
+        using global_ctx_type = global_ctx<session_type>;
         using socket_type = typename StreamType::socket_type;
 		using resolver_type = typename asio::ip::basic_resolver<typename socket_type::protocol_type>;
 		using endpoints_type = typename resolver_type::results_type;
@@ -33,14 +33,13 @@ namespace bnet::base {
 		using key_type = std::size_t;
 	public:
 		template<class ...Args>
-		explicit csession(globalval_type& globalval, func_proxy_imp_ptr& cbfunc, nio& io,
+		explicit csession(global_ctx_type& globalctx, nio& io,
 						std::size_t max_buffer_size, Args&&... args)
 			: stream_type(std::forward<Args>(args)...)
             , proto_type(max_buffer_size)
 			, transfer_type(io, max_buffer_size)
 			, cio_(io)
-			, cbfunc_(cbfunc)
-			, globalval_(globalval)
+			, globalctx_(globalctx)
 		{
 		}
 
@@ -49,13 +48,13 @@ namespace bnet::base {
         template<bool IsKeepAlive = false, typename Fun> 
 		requires is_co_spawn_cb<Fun> || std::same_as<unqualified_t<Fun>, asio::detached_t>
 		inline void start(std::string_view host, std::string_view port, Fun&& func) {
-			asio::co_spawn(this->cio_.context(), [this, self = self_shared_ptr(), host, port]() { 
+			asio::co_spawn(this->cio_.context(), [self = self_shared_ptr(), host, port]() { 
 				return self->template co_start<IsKeepAlive>(host, port);
 			}, func);
 		}
 
-		inline void stop(const error_code& ec) {
-			asio::co_spawn(this->cio_.context(), [this, self = self_shared_ptr(), ec = std::move(ec)]() { 
+		inline void stop(const error_code& ec = ec_ignore) {
+			asio::co_spawn(this->cio_.context(), [self = self_shared_ptr(), ec = std::move(ec)]() { 
 				return self->co_stop(ec);
 			}, asio::detached);
 		}
@@ -67,7 +66,8 @@ namespace bnet::base {
 			}
 
 			asio::co_spawn(this->cio_.context(), [this, self = self_shared_ptr()]() -> asio::awaitable<void> { 
-				co_await async_sleep(co_await asio::this_coro::executor, std::chrono::seconds(3), asio::use_awaitable);
+				auto reconn_interval = (globalctx_.cli_cfg_.reconn_interval > 0 ? globalctx_.cli_cfg_.reconn_interval : 3);
+				co_await async_sleep(co_await asio::this_coro::executor, std::chrono::seconds(reconn_interval), asio::use_awaitable);
 				co_await this->template co_start<IsKeepAlive>(this->host_, this->port_);
 				co_return;
 			}, asio::detached);
@@ -75,21 +75,11 @@ namespace bnet::base {
 			return true;
 		}
 
-		//asio::ip::tcp::endpoint ep(asio::ip::tcp::v4(), 10000);
-		//asio::ip::udp::endpoint ep(asio::ip::udp::v6(), 10001);
-		//asio::ip::tcp::endpoint ep(asio::ip::address_v4::from_string("..."), 10000);
-		//asio::ip::udp::endpoint ep(asio::ip::address_v6::from_string("..."), 10001);
-		//template<typename IP>
-		//inline void endpoint(const IP& ip, unsigned short port) {
-		//	this->endpoint_ = endpoint_type(ip, port);
-		//}
-		//inline endpoint_type& endpoint() { return this->endpoint_; }
-
 		//imp
 		inline auto self_shared_ptr() { return this->shared_from_this(); }
 		//inline asio::streambuf& buffer() { return buffer_; }
 		inline nio& cio() { return cio_; }
-		inline auto& cbfunc() { return cbfunc_; }
+		inline auto& bind_func() { return globalctx_.bind_func_; }
 		inline dynamic_buffer<>& rbuffer() { return rbuff_; }
 
 		inline bool is_started() const {
@@ -130,9 +120,9 @@ namespace bnet::base {
                     asio::detail::throw_error(asio::error::already_started);
 			    }
 
-				//cbfunc_->call(event::init);
 				asio::steady_timer ctimer(cio_.context());
-                ctimer.expires_after(std::chrono::milliseconds(3000));
+				auto conn_timeout = (globalctx_.cli_cfg_.conn_timeout > 0 ? globalctx_.cli_cfg_.conn_timeout : 3000);
+                ctimer.expires_after(std::chrono::milliseconds(conn_timeout));
                 std::variant<error_code, std::monostate> rets = co_await (this->template co_connect<IsKeepAlive>(host, port) || ctimer.async_wait(asio::use_awaitable));
 				ctimer.cancel();
                 auto idx = rets.index();
@@ -153,16 +143,16 @@ namespace bnet::base {
 						}
 					}
 
-					if (bool isadd = this->globalval_.sessions_.emplace(dptr); !isadd) {
-						asio::detail::throw_error(asio::error::address_in_use);
-                	}
-
 					estate expected = estate::starting;
 					if (!this->state_.compare_exchange_strong(expected, estate::started)) {
 						asio::detail::throw_error(asio::error::operation_aborted);
 					}
+
+					if (bool isadd = this->globalctx_.sessions_.emplace(dptr); !isadd) {
+						asio::detail::throw_error(asio::error::address_in_use);
+                	}
 				
-					cbfunc_->call(event::connect, dptr);
+					globalctx_.bind_func_->call(event::connect, dptr);
 
 					//if (auto ec = co_await this->recv_t(); ec) { // sync will block
 					//	asio::detail::throw_error(ec);
@@ -207,7 +197,7 @@ namespace bnet::base {
 					this->transfer_stop();
 
 					auto dptr = this->shared_from_this();
-                    bool isremove = this->globalval_.sessions_.erase(dptr);
+                    bool isremove = this->globalctx_.sessions_.erase(dptr);
 			    	if (!isremove) {
 			    		//asio::detail::throw_error(asio::error::operation_aborted);
 			    	}
@@ -224,7 +214,8 @@ namespace bnet::base {
 
                     estate expected_stopping = estate::stopping;
 					if (this->state_.compare_exchange_strong(expected_stopping, estate::stopped)) {
-						cbfunc_->call(event::disconnect, dptr, ec);
+						globalctx_.bind_func_->call(event::disconnect, dptr, ec);
+						if (ec && globalctx_.cli_cfg_.is_reconn) this->reconn();
 					}
 
                     co_return ec_ignore;
@@ -303,14 +294,13 @@ namespace bnet::base {
 			}
         }
 
-		inline auto& globalval() { return globalval_; }
+		inline auto& globalctx() { return globalctx_; }
 	protected:
 		nio & cio_;
 
         std::string host_, port_;
 
-		func_proxy_imp_ptr& cbfunc_;
-		globalval_type& globalval_;
+		global_ctx_type& globalctx_;
 		
 		std::atomic<estate> state_ = estate::stopped;
 

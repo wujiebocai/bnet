@@ -16,7 +16,7 @@ namespace bnet::base {
     public:
         template<class Body = http::string_body, class Fields = http::fields>
         inline bool execute(http::request<Body, Fields>& req, handle_func_type func) {
-            auto sptr = this->globalval_.sessions_.rand_get();
+            auto sptr = this->globalctx_.sessions_.rand_get();
             if (!sptr) {
                 return false;
             }
@@ -28,7 +28,7 @@ namespace bnet::base {
 
         template<class Body = http::string_body, class Fields = http::fields>
         inline bool execute(http::web_request& req, handle_func_type func) {
-            auto sptr = this->globalval_.sessions_.rand_get();
+            auto sptr = this->globalctx_.sessions_.rand_get();
             if (!sptr) {
                 return false;
             }
@@ -40,7 +40,7 @@ namespace bnet::base {
 
         template<class Body = http::string_body, class Fields = http::fields>
         inline bool execute(std::string_view url, handle_func_type func) {
-            auto sptr = this->globalval_.sessions_.rand_get();
+            auto sptr = this->globalctx_.sessions_.rand_get();
             if (!sptr) {
                 return false;
             }

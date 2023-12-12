@@ -29,7 +29,7 @@ namespace bnet::base {
 
         inline asio::awaitable<void> dequeue() {
             while(!queue_.empty()) {
-                co_await (queue_.front())();
+                if (auto ec = co_await (queue_.front())()) break;
                 queue_.pop_front();
             }
 

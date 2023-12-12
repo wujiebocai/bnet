@@ -112,7 +112,7 @@ namespace bnet::base {
 
         inline void handle_recv(error_code ec, const std::string_view& s) {
             std::ignore = ec;
-			this->derive_.cbfunc()->call(event::recv, this->derive_.self_shared_ptr(), std::move(s));
+			this->derive_.bind_func()->call(event::recv, this->derive_.self_shared_ptr(), std::move(s));
 		}
 
     protected:
@@ -234,9 +234,10 @@ namespace bnet::base {
         inline void remote_endpoint(const asio::ip::udp::endpoint& endpoint) { this->remote_endpoint_ = std::move(endpoint); }
         inline auto& buffer() { return buffer_; }
 
-        inline void handle_recv(error_code ec, const std::string_view& s) {
-            std::ignore = ec;
-			this->derive_.cbfunc()->call(event::recv, this->derive_.self_shared_ptr(), std::move(s));
+        inline error_code handle_recv(error_code ec, const std::string_view& s) {
+            //std::ignore = ec;
+			this->derive_.bind_func()->call(event::recv, this->derive_.self_shared_ptr(), std::move(s));
+            return ec;
 		}
     protected:
         inline void transfer_start() {
@@ -249,6 +250,7 @@ namespace bnet::base {
         inline asio::awaitable<void> send_t() {
             error_code rec;
             try {
+                auto dself = this->derive_.self_shared_ptr();
                 while (this->derive_.is_started()) {
                     co_await this->dequeue(*this);
                 }
@@ -342,7 +344,8 @@ namespace bnet::base {
         template<class DataType, class HandleFunc>
         inline void send(DataType&& data, HandleFunc&& f) requires is_cli_c<SvrOrCli> {
             this->enqueue([this, data = std::move(data), f = std::move(f)]() -> asio::awaitable<error_code> {
-                timer_.expires_after(std::chrono::seconds(3));
+                auto req_timout = (derive_.globalctx().cli_cfg_.request_timout > 0 ? derive_.globalctx().cli_cfg_.request_timout : 5);
+                timer_.expires_after(std::chrono::seconds(req_timout));
                 std::variant<error_code, std::monostate> rets = co_await (this->co_send_recv(std::move(data)) || timer_.async_wait(asio::use_awaitable));
                 timer_.cancel();
 
@@ -387,7 +390,8 @@ namespace bnet::base {
                 });
             }
             
-            reset_timer(timer_, std::chrono::seconds(5), [this, self = this->derive_.self_shared_ptr()](const error_code& ec) {
+            auto req_timout = (derive_.globalctx().cli_cfg_.request_timout > 0 ? derive_.globalctx().cli_cfg_.request_timout : 5);
+            reset_timer(timer_, std::chrono::seconds(req_timout), [this, self = this->derive_.self_shared_ptr()](const error_code& ec) {
                 if (ec || this->derive_.cli_router().size() <= 0) {
                     return;
                 }
@@ -500,15 +504,11 @@ namespace bnet::base {
     protected:
         inline void transfer_start() {
             normal_queue::init();
-            asio::co_spawn(this->derive_.cio().context(), [self = this->derive_.self_shared_ptr()]() -> asio::awaitable<void> { 
-				return self->send_t();
-			}, asio::detached);
+            asio::co_spawn(this->derive_.cio().context(), send_t(), asio::detached);
 #if defined(BNET_HTTP_NOPIPELINE)
             if constexpr (is_svr_c<SvrOrCli>) 
 #endif
-            asio::co_spawn(this->derive_.cio().context(), [self = this->derive_.self_shared_ptr()]() -> asio::awaitable<void> { 
-				return self->recv_t();
-			}, asio::detached);
+            asio::co_spawn(this->derive_.cio().context(), recv_t(), asio::detached);
 		}
         inline void transfer_stop() {
             normal_queue::uninit();
@@ -518,7 +518,8 @@ namespace bnet::base {
         inline asio::awaitable<void> send_t() {
             error_code rec;
             try {
-                while (this->derive_.is_started()) {
+                auto dself = this->derive_.self_shared_ptr();
+                while (dself->is_started()) {
                     co_await this->dequeue();
                 }
             }
@@ -546,8 +547,8 @@ namespace bnet::base {
             error_code rec;
             try {
                 set_rsp_refresh();
-
-                while (this->derive_.is_started()) {
+                auto dself = this->derive_.self_shared_ptr();
+                while (dself->is_started()) {
                     // Make the request empty before reading,
 				    // otherwise the operation behavior is undefined.
 				    this->req_.reset();
@@ -582,7 +583,8 @@ namespace bnet::base {
         inline asio::awaitable<void> recv_t() requires is_cli_c<SvrOrCli> {
             error_code rec;
             try {
-                while (this->derive_.is_started()) {
+                auto dself = this->derive_.self_shared_ptr();
+                while (dself->is_started()) {
                     // Make the request empty before reading,
 				    // otherwise the operation behavior is undefined.
 				    this->rep_.reset();
@@ -608,7 +610,7 @@ namespace bnet::base {
         inline asio::awaitable<void> handle_recv_s() {
             std::string path(this->req_.path());
             auto method = this->req_.method();
-            auto ret = this->derive_.globalval().handle(method, path);
+            auto ret = this->derive_.globalctx().handle(method, path);
 
             if (ret && (*ret).handlers_) {
                 (*ret).handlers_(req_, rep_);
@@ -621,7 +623,7 @@ namespace bnet::base {
 		}
 
         inline void handle_recv_c(const error_code& ec) {
-            //this->derive_.cbfunc()->call(event::recv, this->derive_.self_shared_ptr(), req_, rep_);
+            //this->derive_.bind_func()->call(event::recv, this->derive_.self_shared_ptr(), req_, rep_);
             //auto func = this->derive_.cli_router().handle();
             //if (func) {
             //    func(req_, rep_);
@@ -642,7 +644,6 @@ namespace bnet::base {
     protected:
         DriverType& derive_;
         beast::flat_buffer rbuff_;
-
         http::web_request req_;
 		http::web_response rep_;
         asio::steady_timer timer_;
@@ -783,7 +784,7 @@ namespace bnet::base {
 
         inline void handle_recv(error_code ec, const std::string_view& s) {
             std::ignore = ec;
-			this->derive_.cbfunc()->call(event::recv, this->derive_.self_shared_ptr(), std::move(s));
+			this->derive_.bind_func()->call(event::recv, this->derive_.self_shared_ptr(), std::move(s));
 		}
 
         //inline websocket::request_type& upgrade_req() { return upgrade_req_; }
@@ -852,7 +853,7 @@ namespace bnet::base {
             if (ec) {
                 return ec;
             }
-			//this->derive_.cbfunc()->call(event::recv, this->derive_.self_shared_ptr(), std::move(s));
+			//this->derive_.bind_func()->call(event::recv, this->derive_.self_shared_ptr(), std::move(s));
             auto ptr = this->derive_.self_shared_ptr();
             auto kec = this->derive_.kcp_handle_recv_t(ptr, s);
             if (kec) {

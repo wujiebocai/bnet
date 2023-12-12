@@ -20,14 +20,8 @@ namespace bnet {
 	};
 
 namespace base {
-	using CBPROXYTYPE = func_proxy_imp<event>;
-	typedef std::shared_ptr<CBPROXYTYPE> func_proxy_imp_ptr;
-
-	struct svr_tag {};
-	struct cli_tag {};
-	struct kcp_stream_tag {};
-	struct http_tag {};
-	struct ws_tag {};
+	using BINDFUNCTYPE = func_proxy_imp<event>;
+	typedef std::shared_ptr<BINDFUNCTYPE> bind_func_ptr_type;
 }
 }
 

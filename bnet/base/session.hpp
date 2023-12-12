@@ -20,19 +20,18 @@ namespace bnet::base {
 		using stream_type = StreamType;
 		using proto_type = ProtoType;
 		using transfer_type = transfer<session, StreamType, ProtoType, svr_tag>;
-		using globalval_type = global_val<session_type>;
+		using global_ctx_type = global_ctx<session_type>;
 		//using key_type = typename std::conditional<is_udp_socket_v<SocketType>, asio::ip::udp::endpoint, std::size_t>::type;
 		using key_type = std::size_t;
 	public:
 		template<class ...Args>
-		explicit session(globalval_type& globalval, func_proxy_imp_ptr & cbfunc, nio & io,
+		explicit session(global_ctx_type& globalctx, nio & io,
 						std::size_t max_buffer_size, Args&&... args)
 			: stream_type(std::forward<Args>(args)...)
 			, proto_type(max_buffer_size)
 			, transfer_type(io, max_buffer_size)
 			, cio_(io)
-			, cbfunc_(cbfunc)
-			, globalval_(globalval)
+			, globalctx_(globalctx)
 		{
 		
 		}
@@ -46,7 +45,7 @@ namespace bnet::base {
 			}, asio::detached);
 		}
 
-		inline void stop(const error_code& ec) {
+		inline void stop(const error_code& ec = ec_ignore) {
 			asio::co_spawn(this->cio_.context(), [this, self = self_shared_ptr(), ec = std::move(ec)]() { 
 				return self->co_stop(ec);
 			}, asio::detached);
@@ -73,8 +72,7 @@ namespace bnet::base {
 		//inline void set_first_pack(std::string&& str) { first_pack_ = std::move(str); }
 		//inline auto& get_first_pack() { return first_pack_; }
 		inline dynamic_buffer<>& rbuffer() { return rbuff_; }
-		inline auto& cbfunc() { return cbfunc_; }
-
+		inline auto& bind_func() { return globalctx_.bind_func_; }
 
 		template<class DataT>
 		inline void user_data(DataT && data) {
@@ -96,7 +94,6 @@ namespace bnet::base {
 		inline asio::awaitable<error_code> co_start() {
 			error_code rec;
 			try {
-				//cbfunc_->call(event::accept, dptr, ec);
 				estate expected = estate::stopped;
 				if (!this->state_.compare_exchange_strong(expected, estate::starting))
 					asio::detail::throw_error(asio::error::already_started);
@@ -115,15 +112,15 @@ namespace bnet::base {
 					}
 				}
 
-				//add session_mgr
-				if (bool isadd = this->globalval_.sessions_.emplace(sptr); !isadd)
-					asio::detail::throw_error(asio::error::address_in_use);
-
 				expected = estate::starting;
 				if (!this->state_.compare_exchange_strong(expected, estate::started))
 					asio::detail::throw_error(asio::error::operation_aborted);
 
-				cbfunc_->call(event::connect, sptr);
+				//add session_mgr
+				if (bool isadd = this->globalctx_.sessions_.emplace(sptr); !isadd)
+					asio::detail::throw_error(asio::error::address_in_use);
+
+				globalctx_.bind_func_->call(event::connect, sptr);
 
 				//if (auto ec = co_await this->recv_t(); ec) {
 				//	asio::detail::throw_error(ec);
@@ -157,7 +154,7 @@ namespace bnet::base {
 					this->transfer_stop();
 
 					auto dptr = this->shared_from_this();
-					bool isremove = this->globalval_.sessions_.erase(dptr);
+					bool isremove = this->globalctx_.sessions_.erase(dptr);
 					if (!isremove) {
 						//asio::detail::throw_error(asio::error::operation_aborted);
 					}
@@ -174,8 +171,7 @@ namespace bnet::base {
 
 					estate expected_stopping = estate::stopping;
 					if (this->state_.compare_exchange_strong(expected_stopping, estate::stopped)) {
-						//if (oldstate == estate::started)
-						cbfunc_->call(event::disconnect, dptr, ec); // 这个接口后面需要增加，退出成功的错误，因为什么错误而退出去的
+						globalctx_.bind_func_->call(event::disconnect, dptr, ec);
 					}
 					else {
 						NET_ASSERT(false);
@@ -190,20 +186,16 @@ namespace bnet::base {
 			}
 		}
 
-		inline auto& globalval() { return globalval_; }
+		inline auto& globalctx() { return globalctx_; }
 	protected:
 		nio & cio_;
-
-		func_proxy_imp_ptr & cbfunc_;
 		
-		globalval_type& globalval_;
+		global_ctx_type& globalctx_;
 
 		std::atomic<estate> state_ = estate::stopped;
 
 		dynamic_buffer<> rbuff_;
 
 		std::any user_data_;
-
-		//std::string first_pack_;
 	};
 }

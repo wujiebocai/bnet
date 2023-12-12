@@ -76,7 +76,7 @@ namespace bnet::base {
 				ec = co_await this->upgrade(ptr, upgrade_rep_);
 			}
 
-			ptr->cbfunc()->call(event::upgrade, ptr, ec);
+			ptr->bind_func()->call(event::upgrade, ptr, ec);
 
 			co_return ec;
 		}
@@ -106,7 +106,7 @@ namespace bnet::base {
 			// TODO return a custom error code
 			// BHO_ASSERT(! impl.wr_close);
 			if (ptr->stream().is_open()) {
-				std::cout << "ws_stream_cp enter async_close" << std::endl;
+				std::cout << "ws proto enter async_close" << std::endl;
 
 				// Close the WebSocket connection
 				// async_close behavior : 
@@ -115,7 +115,7 @@ namespace bnet::base {
 				// async_close maybe close the socket directly.
 				auto [ec] = co_await ptr->stream().async_close(websocket::close_code::normal, asio::as_tuple(asio::use_awaitable));
 
-				std::cout << "ws_stream_cp leave async_close:" << ec.value() << " " << ec.message() << std::endl;
+				std::cout << "ws proto leave async_close:" << ec.value() << " " << ec.message() << std::endl;
 
 				// if async close failed, the inner timer of async close will exists for timeout,
 				// it will cause the ws client can't be exited, so we reset the timeout to none
@@ -212,16 +212,8 @@ namespace bnet::base {
 		inline void handle_control_close(std::string_view payload, SessionPtr&& ptr) {
 			std::ignore = payload;
 			std::ignore = ptr;
-			//derived_t& derive = static_cast<derived_t&>(*this);
-
-			//detail::ignore_unused(payload, this_ptr, ecs);
-
-			//if (derive.state() == state_t::started)
-			//{
-			//	ASIO2_LOG_DEBUG("ws_stream_cp::_handle_control_close _do_disconnect");
-
-			//	derive._do_disconnect(websocket::error::closed, std::move(this_ptr));
-			//}
+			
+			//ptr->stop(websocket::error::closed);
 		}
 
 		template<typename SessionPtr, typename Response>

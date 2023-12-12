@@ -28,6 +28,7 @@ namespace bnet {
 }
 #endif
 
+#include "config.hpp"
 #include "base/timer.hpp"
 #include "base/server.hpp"
 #include "base/client.hpp"

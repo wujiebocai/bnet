@@ -22,23 +22,21 @@ namespace bnet::base {
 		using session_type = csession<StreamType, ProtoType>;
 		using session_ptr_type = std::shared_ptr<session_type>;
 		using session_weakptr_type = std::weak_ptr<session_type>;
-        using globalval_type = global_val<session_type>;
+        using global_ctx_type = global_ctx<session_type>;
 		using stream_ctx_type = stream_ctx<StreamType>;
 	public:
 		template<class ...Args>
-		explicit client(std::size_t concurrency = std::thread::hardware_concurrency() * 2, std::size_t max_buffer_size = (std::numeric_limits<std::size_t>::max)())
-			: iopool(concurrency)
+		explicit client(const cli_cfg& cfg)
+			: iopool(cfg.thread_num > 0 ? cfg.thread_num : std::thread::hardware_concurrency() * 2)
 			, stream_ctx_type(cli_tag{})
 			, cio_(iopool_.get(0))
-			, globalval_(/*cio_*/)
-			, max_buffer_size_(max_buffer_size)
-			, cbfunc_(std::make_shared<CBPROXYTYPE>())
+			, globalctx_(cfg)
+			, max_buffer_size_(cfg.limit_buffer_size > 0 ? cfg.limit_buffer_size : std::numeric_limits<std::size_t>::max())
 		{
 			this->iopool_.start();
 		}
 
 		~client() {
-			//this->stop(ec_ignore);
 			this->iopool_.stop();
 		}
 
@@ -78,18 +76,25 @@ namespace bnet::base {
 
 			clear_last_error();
 
-			//cbfunc_->call(Event::init);
-
 			expected = estate::starting;
 			if (!this->state_.compare_exchange_strong(expected, estate::started)) {
 				set_last_error(asio::error::operation_aborted);
 				return false;
 			}
 
+			for (size_t i = 0; i < globalctx_.cli_cfg_.pool_size; i++) {
+				if (globalctx_.cli_cfg_.is_async) {
+					add(globalctx_.cli_cfg_.host, globalctx_.cli_cfg_.port);
+				}
+				else {
+					add<false>(globalctx_.cli_cfg_.host, globalctx_.cli_cfg_.port);
+				}
+			}
+
 			return (this->is_started());
 		}
 
-		inline void stop(const error_code& ec) {
+		inline void stop(const error_code& ec = ec_ignore) {
 			estate expected = estate::starting;
 			if (this->state_.compare_exchange_strong(expected, estate::stopping))
 				return this->stop_t(ec);
@@ -109,35 +114,35 @@ namespace bnet::base {
 
 		template<class ...Args>
 		bool bind(Args&&... args) {
-			return cbfunc_->bind(std::forward<Args>(args)...);
+			return globalctx_.bind_func_->bind(std::forward<Args>(args)...);
 		}
 
 		template<class ...Args>
 		bool call(Args&&... args) {
-			return cbfunc_->call(std::forward<Args>(args)...);
+			return globalctx_.bind_func_->call(std::forward<Args>(args)...);
 		}
 
 		//广播所有session
 		inline void broadcast(const std::string_view && data) {
-			this->globalval_.sessions_.foreach([&data](session_ptr_type& session_ptr) {
+			this->globalctx_.sessions_.foreach([&data](session_ptr_type& session_ptr) {
 				session_ptr->send(data);
 			});
 		}
 
 		inline session_ptr_type find_session_if(const std::function<bool(session_ptr_type&)> & fn) {
-			return session_ptr_type(this->globalval_.sessions_.find_if(fn));
+			return session_ptr_type(this->globalctx_.sessions_.find_if(fn));
 		}
 
 		inline session_ptr_type make_session() {
 			auto& cio = this->iopool_.get();
 #if defined(BNET_ENABLE_SSL)
 			if constexpr (is_ssl_stream<StreamType>) {
-				return std::make_shared<session_type>(this->globalval_, this->cbfunc_, cio, this->max_buffer_size_
+				return std::make_shared<session_type>(this->globalctx_, cio, this->max_buffer_size_
 					, cio, asio::ssl::stream_base::client, cio.context(), *this);
 			}
 #endif
 			if constexpr (is_binary_stream<StreamType> || is_kcp_stream<StreamType>) {
-            	return std::make_shared<session_type>(this->globalval_, this->cbfunc_, cio, this->max_buffer_size_, cio.context());
+            	return std::make_shared<session_type>(this->globalctx_, cio, this->max_buffer_size_, cio.context());
 			}
 		}
 
@@ -146,13 +151,13 @@ namespace bnet::base {
 		inline void stop_t(const error_code& ec) {
             set_last_error(ec);
 
-            this->globalval_.sessions_.foreach([this, ec](session_ptr_type& session_ptr) {
+            this->globalctx_.sessions_.foreach([this, ec](session_ptr_type& session_ptr) {
 				session_ptr->stop(ec);
 			});
 
             estate expected = estate::stopping;
 			if (this->state_.compare_exchange_strong(expected, estate::stopped)) {
-				//cbfunc_->call(Event::stop);
+				//globalctx_.bind_func_->call(Event::stop);
 			}
 			else
 				NET_ASSERT(false);
@@ -160,14 +165,12 @@ namespace bnet::base {
             return;
         }
 
-		inline auto& globalval() { return globalval_; }
+		inline auto& globalctx() { return globalctx_; }
 	protected:
 		nio & cio_; 
-		globalval_type globalval_;
+		global_ctx_type globalctx_;
 
 		std::size_t max_buffer_size_;
-
-		func_proxy_imp_ptr cbfunc_;
 
 		std::atomic<estate> state_ = estate::stopped;
 	};

@@ -23,6 +23,14 @@ namespace bnet::base {
     };
 #endif
 
+    struct svr_tag {};
+	struct cli_tag {};
+
+	struct kcp_stream_tag {};
+	struct http_tag {};
+    
+	struct ws_tag {};
+
     template <class StreamType>
     concept is_kcp_stream = requires {
         typename StreamType::stream_type;

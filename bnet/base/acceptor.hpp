@@ -82,7 +82,6 @@ namespace bnet::base {
         }
 
         inline void acceptor_stop() {
-            //asio::co_spawn(this->cio_.context(), [self = this->server_.self_shared_ptr()]{ return this->acceptor_stop_t(); }, asio::detached)
             this->acceptor_stop_t();
         }
 
@@ -200,9 +199,7 @@ namespace bnet::base {
 				}
 
 				auto executor = co_await asio::this_coro::executor;
-                asio::co_spawn(executor, [this/*, self = this->server_.self_shared_ptr()*/]() { 
-					return this->acceptor_start_t(); 
-				}, asio::detached);
+                asio::co_spawn(executor, this->acceptor_start_t(), asio::detached);
 			}
 			catch (system_error& e) {
 				set_last_error(e);
@@ -247,8 +244,9 @@ namespace bnet::base {
 						session_ptr->remote_endpoint(remote_endpoint);
 						session_ptr->start();
 					} else {
-						session_ptr->handle_recv(ec, std::string_view(reinterpret_cast<
+						error_code sec = session_ptr->handle_recv(ec, std::string_view(reinterpret_cast<
 							std::string_view::const_pointer>(buffer.rd_buf()), nrecv));
+						if (sec) co_await session_ptr->co_stop(sec);
 					}
 				}
 

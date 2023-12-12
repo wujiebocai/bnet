@@ -34,36 +34,30 @@ namespace bnet::base {
 		using session_weakptr_type = std::weak_ptr<session_type>;
 		using acceptor_type = acceptor<server, StreamType>;
 		using stream_ctx_type = stream_ctx<StreamType>;
-		using globalval_type = global_val<session_type>;
+		using global_ctx_type = global_ctx<session_type>;
 	public:
-		explicit server(std::size_t concurrency = std::thread::hardware_concurrency() * 2, std::size_t max_buffer_size = (std::numeric_limits<std::size_t>::max)())
-			: iopool(concurrency)
+		explicit server(const svr_cfg& cfg)
+			: iopool(cfg.thread_num > 0 ? cfg.thread_num : std::thread::hardware_concurrency() * 2)
 			, stream_ctx_type(svr_tag{})
 			, acceptor_type(iopool_.get(0))
             , accept_io_(iopool_.get(0))
-			, globalval_(/*accept_io_*/)
-			, max_buffer_size_(max_buffer_size)
-			, cbfunc_(std::make_shared<CBPROXYTYPE>())
+			, globalctx_(cfg)
+			, max_buffer_size_(cfg.limit_buffer_size > 0 ? cfg.limit_buffer_size : std::numeric_limits<std::size_t>::max())
 			
 		{
 			this->iopool_.start();
 		}
 
 		~server() {
-			//this->stop(ec_ignore);
 			this->iopool_.stop();
 		}
 
-        inline void start(const std::string_view& host, const std::string_view& service) {
-			asio::co_spawn(this->accept_io_.context(), [this/*, self = this->self_shared_ptr()*/, host, service]() { 
-				return this->co_start(host, service);
-			}, asio::detached);
+        inline void start() {
+			asio::co_spawn(this->accept_io_.context(), co_start(globalctx_.svr_cfg_.host, globalctx_.svr_cfg_.port), asio::detached);
         }
 
-		inline void stop(const error_code& ec) {
-			asio::co_spawn(this->accept_io_.context(), [this/*, self = this->self_shared_ptr()*/, ec = std::move(ec)]() { 
-				return this->co_stop(ec);
-			}, asio::detached);
+		inline void stop(const error_code& ec = ec_ignore) {
+			asio::co_spawn(this->accept_io_.context(), co_stop(ec), asio::detached);
 		}
 
 	//protected:
@@ -80,8 +74,6 @@ namespace bnet::base {
 				if (ec) {
 					asio::detail::throw_error(ec);
 				}
-
-				//cbfunc_->call(event::init);
 
 				expected = estate::starting;
 				if (!this->state_.compare_exchange_strong(expected, estate::started)) {
@@ -108,13 +100,13 @@ namespace bnet::base {
 
 					this->acceptor_stop();
 
-					this->globalval_.sessions_.foreach([this, ec](session_ptr_type & session_ptr) {
+					this->globalctx_.sessions_.foreach([this, ec](session_ptr_type & session_ptr) {
 						session_ptr->stop(ec);
 					});
 
 					estate expected_stopping = estate::stopping;
 					if (this->state_.compare_exchange_strong(expected_stopping, estate::stopped)) {
-						//cbfunc_->call(event::stop);
+						//globalctx_.bind_func_->call(event::stop);
 					}
 					else
 						NET_ASSERT(false);
@@ -138,7 +130,7 @@ namespace bnet::base {
 		}
 
 		inline void broadcast(const std::string_view && data) {
-			this->globalval_.sessions_.foreach([&data](session_ptr_type& session_ptr) {
+			this->globalctx_.sessions_.foreach([&data](session_ptr_type& session_ptr) {
 				session_ptr->send(data);
 			});
 		}
@@ -147,57 +139,55 @@ namespace bnet::base {
 			auto& cio = this->iopool_.get();
 #if defined(BNET_ENABLE_SSL)
 			if constexpr (is_ssl_stream<StreamType>) {
-				return std::make_shared<session_type>(this->globalval_, this->cbfunc_, cio, this->max_buffer_size_
+				return std::make_shared<session_type>(this->globalctx_, cio, this->max_buffer_size_
 					, cio, asio::ssl::stream_base::server, cio.context(), *this);
 			}
 #endif
 			if constexpr (is_binary_stream<StreamType> || is_kcp_stream<StreamType>) {
 				if constexpr (is_udp_by_stream<StreamType>) {
-					return std::make_shared<session_type>(this->globalval_, this->cbfunc_, this->cio_, this->max_buffer_size_, this->acceptor_);
+					return std::make_shared<session_type>(this->globalctx_, this->cio_, this->max_buffer_size_, this->acceptor_);
 				}
 
 				if constexpr (is_tcp_by_stream<StreamType>) {
-					return std::make_shared<session_type>(this->globalval_, this->cbfunc_, cio, this->max_buffer_size_, cio.context());
+					return std::make_shared<session_type>(this->globalctx_, cio, this->max_buffer_size_, cio.context());
 				}
 			}
 		}
 
-		inline std::size_t session_count() { return this->globalval_.sessions_.size(); }
+		inline std::size_t session_count() { return this->globalctx_.sessions_.size(); }
 
 		inline void foreach_session(const std::function<void(session_ptr_type&)> & fn) {
-			this->globalval_.sessions_.foreach(fn);
+			this->globalctx_.sessions_.foreach(fn);
 		}
 
 		inline session_ptr_type find_session_if(const std::function<bool(session_ptr_type&)> & fn) {
-			return session_ptr_type(this->globalval_.sessions_.find_if(fn));
+			return session_ptr_type(this->globalctx_.sessions_.find_if(fn));
 		}
 
 		template<class ...Args>
 		bool bind(Args&&... args) {
-			return cbfunc_->bind(std::forward<Args>(args)...);
+			return globalctx_.bind_func_->bind(std::forward<Args>(args)...);
 		}
 
 		template<class ...Args>
 		bool call(Args&&... args) {
-			return cbfunc_->call(std::forward<Args>(args)...);
+			return globalctx_.bind_func_->call(std::forward<Args>(args)...);
 		}
 
 		auto& get_iopool() { return iopool_; }
-		auto& get_sessions() { return this->globalval_.sessions_; }
+		auto& get_sessions() { return this->globalctx_.sessions_; }
 
         //inline auto self_shared_ptr() { return this->shared_from_this(); }
 		
-		inline auto& globalval() { return globalval_; }
+		inline auto& globalctx() { return globalctx_; }
 	protected:
 		nio & accept_io_;
 
-		globalval_type globalval_;
+		global_ctx_type globalctx_;
 
 		std::atomic<estate> state_ = estate::stopped;
 
 		std::size_t max_buffer_size_ = 0;
 		std::size_t min_buffer_size_ = 0;
-
-		func_proxy_imp_ptr cbfunc_;
 	};
 }

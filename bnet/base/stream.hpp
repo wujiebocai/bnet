@@ -82,7 +82,7 @@ namespace bnet::base {
 			//	co_return ec;
 			//}
 
-			ptr->cbfunc()->call(event::handshake, ptr, ec);
+			ptr->bind_func()->call(event::handshake, ptr, ec);
 
 			co_return ec;
 		}
@@ -98,10 +98,10 @@ namespace bnet::base {
 				co_return ec;
 			}
 
-			//SocketType::close();
-			this->socket().lowest_layer().close();
+			SocketType::close();
+			//this->socket().lowest_layer().close();
 
-			//SSL_clear(this->socket().native_handle());
+			SSL_clear(this->socket().native_handle());
 
 			co_return ec_ignore;
 		}
@@ -473,12 +473,13 @@ namespace bnet::base {
 
 		template<class SessionPtr>
 		asio::awaitable<void> kcp_timer_t(SessionPtr&& ptr, const asio::any_io_executor& e) {
-			asio::steady_timer ktimer(e, asio::chrono::seconds(0));
+			asio::steady_timer ktimer(e);//, asio::chrono::seconds(0));
 			while (/*ptr->is_started()*/ is_stream_start_ && this->socket().is_open()) {
 				std::uint32_t clock1 = static_cast<std::uint32_t>(std::chrono::duration_cast<
 					std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count());
 				std::uint32_t clock2 = kcp::ikcp_check(this->kcp_, clock1);
-				ktimer.expires_at(ktimer.expiry() + std::chrono::milliseconds(clock2 - clock1));
+				//ktimer.expires_at(ktimer.expiry() + std::chrono::milliseconds(clock2 - clock1));
+				ktimer.expires_after(std::chrono::milliseconds(clock2 - clock1));
 				asio::error_code ec;
           		co_await ktimer.async_wait(asio::redirect_error(asio::use_awaitable, ec));
 				if (ec == asio::error::operation_aborted) {
@@ -490,7 +491,7 @@ namespace bnet::base {
 					std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count());
 				kcp::ikcp_update(this->kcp_, clock);
 				if (this->kcp_->state == (kcp::IUINT32)-1) {
-					ptr->stop(asio::error::network_reset);
+					co_await ptr->co_stop(asio::error::network_reset);
 					co_return;
 				}
 			}
@@ -550,14 +551,12 @@ namespace bnet::base {
 				len = kcp::ikcp_recv(this->kcp_, (char*)buffer.wr_buf(), buffer.wr_size());
 				if (len >= 0) {
 					// 通知逻辑层数据
-					ptr->cbfunc()->call(event::recv, ptr, std::string_view(reinterpret_cast<
+					ptr->bind_func()->call(event::recv, ptr, std::string_view(reinterpret_cast<
 						std::string_view::const_pointer>(buffer.rd_buf()), len));
-					//derive._fire_recv(this_ptr, ecs, std::string_view(static_cast
-					//	<std::string_view::const_pointer>(buffer.data().data()), len));
 				}
 				else if (len == -3) {
 					buffer.wr_reserve(init_buffer_size_);
-					//buffer.pre_size((std::min)(buffer.pre_size() * 2, buffer.max_size()));
+					//buffer.wr_reserve(std::min)(buffer.pre_size() * 2, buffer.max_size()));
 				}
 				else {
 					break;
@@ -586,7 +585,7 @@ namespace bnet::base {
 
 		template<class SessionPtr> 
 		inline void handle_handshake(SessionPtr&& ptr, error_code ec) {
-			ptr->cbfunc()->call(event::handshake, ptr, ec);
+			ptr->bind_func()->call(event::handshake, ptr, ec);
 		}
 
 		template<class SessionPtr>
