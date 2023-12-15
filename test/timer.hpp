@@ -17,7 +17,15 @@ void timer_tst() {
 		// return false， exit；return true， continue
 	});
 
-    // once call
+    auto io_worker = asio::make_work_guard(context);
+	context.run();
+}
+
+void timer_tst1() {
+	asio::io_context context(1);
+    bnet::Timer timer(context);
+
+	// once call
     timer.start<false>(std::chrono::seconds(5), [](std::error_code& ec) mutable {
         if (ec) {
 			std::cerr << "err: " << ec.message() << std::endl;

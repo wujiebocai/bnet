@@ -102,6 +102,13 @@ void proxy_tst(asio::io_context& io) {
     	cli.set_cert_buffer(ca_crt, client_crt, client_key, "123456");
 	}
     cli.start();
+
+	/*
+	* The following code has the same effect as setting the pool_size configuration field, except that different service ports can be connected
+	*/
+	//for (int i = 0; i < 10; ++i) {
+	//	cli.add("127.0.0.1", "10240");
+	//}
 }
 
 /*

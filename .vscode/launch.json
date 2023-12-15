@@ -8,7 +8,7 @@
             "name": "(gdb) 启动",
             "type": "cppdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/__GEN/linux/netdemo",
+            "program": "${workspaceFolder}/__GEN/nettest",
             "args": [],
             "stopAtEntry": false,
             "cwd": "${fileDirname}",
