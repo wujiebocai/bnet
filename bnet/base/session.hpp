@@ -187,6 +187,7 @@ namespace bnet::base {
 		}
 
 		inline auto& globalctx() { return globalctx_; }
+		inline const auto& state() { return state_; }
 	protected:
 		nio & cio_;
 		

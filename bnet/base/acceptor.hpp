@@ -242,7 +242,7 @@ namespace bnet::base {
 						std::cout << "udp acceptor: " << this->server_.session_count() << ", aa:" << std::hash<asio::ip::udp::endpoint>()(remote_endpoint) << std::endl;
 						session_ptr->buffer().put(buffer.rd_buf(), nrecv);
 						session_ptr->remote_endpoint(remote_endpoint);
-						session_ptr->start();
+						co_await session_ptr->co_start();
 					} else {
 						error_code sec = session_ptr->handle_recv(ec, std::string_view(reinterpret_cast<
 							std::string_view::const_pointer>(buffer.rd_buf()), nrecv));

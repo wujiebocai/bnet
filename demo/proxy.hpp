@@ -84,8 +84,7 @@ void proxy_tst(asio::io_context& io) {
 	};
 	cli_cfg ccfg {
 		thread_num: 5,
-		pool_size: 100,
-		is_reconn: true
+		pool_size: 100
 	};
 	// svr
 	static auto svr = svr_proxy<SvrType>(scfg);
@@ -106,6 +105,7 @@ void proxy_tst(asio::io_context& io) {
 }
 
 /*
+* the following parameters correspond to different test cases:
 * tcp, false, io -> test tcp
 * tcps, true, io -> test tcp ssl
 * ws, false, io -> test websocket
@@ -114,9 +114,3 @@ void proxy_tst(asio::io_context& io) {
 * kcp, false, io -> test kcp
 */
 #define net_proxy_tst(proto, is_ssl, io) proxy_tst<proto##_svr, proto##_cli, is_ssl>(io)
-	//if constexpr (is_ssl) {	
-	//	proxy_tst<proto##s_svr, proto##s_cli, is_ssl>(io); 
-	//} 
-	//else { 
-	//	proxy_tst<proto##_svr, proto##_cli, is_ssl>(io); 
-	//}

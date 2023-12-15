@@ -34,7 +34,7 @@ public:
 
 			print_time();
 
-            std::cout << count_ / timenum_ << " " << count_ << std::endl;
+            std::cout << "qps: " << count_ << std::endl;
 		    count_ = 0;
         }
     }

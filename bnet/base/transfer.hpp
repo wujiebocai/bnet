@@ -72,7 +72,8 @@ namespace bnet::base {
         inline asio::awaitable<void> send_t() {
             error_code rec;
             try {
-                while (this->derive_.is_started()) {
+                auto dself = this->derive_.self_shared_ptr();
+                while (dself->is_started()) {
                     co_await this->dequeue(*this);
                 }
             }
@@ -87,7 +88,8 @@ namespace bnet::base {
         asio::awaitable<void> recv_t() {
             error_code rec;
             try {
-                while (this->derive_.is_started()) {
+                auto dself = this->derive_.self_shared_ptr();
+                while (dself->is_started()) {
                     //auto [ec, nrecv] = co_await this->derive_.stream().async_read_some(this->buffer_);
                     auto [ec, nrecv] = co_await asio::async_read(this->derive_.socket(), this->buffer_, asio::transfer_at_least(1), asio::as_tuple(asio::use_awaitable));
                     if (ec) {
@@ -251,7 +253,7 @@ namespace bnet::base {
             error_code rec;
             try {
                 auto dself = this->derive_.self_shared_ptr();
-                while (this->derive_.is_started()) {
+                while (dself->is_started()) {
                     co_await this->dequeue(*this);
                 }
             }
@@ -266,7 +268,8 @@ namespace bnet::base {
 		inline asio::awaitable<void> recv_t() requires is_cli_c<SvrOrCli> {
             error_code rec;
             try {
-                while (this->derive_.is_started()) {
+                auto dself = this->derive_.self_shared_ptr();
+                while (dself->is_started()) {
                     //this->buffer_.wr_reserve(init_buffer_size_);
                     //this->buffer_.reset();
                     auto [ec, nrecv] = co_await this->derive_.socket().async_receive(asio::mutable_buffer(this->buffer_.wr_buf(), this->buffer_.wr_size()), 
@@ -743,7 +746,8 @@ namespace bnet::base {
         inline asio::awaitable<void> send_t() {
             error_code rec;
             try {
-                while (this->derive_.is_started()) {
+                auto dself = this->derive_.self_shared_ptr();
+                while (dself->is_started()) {
                     co_await this->dequeue(*this);
                 }
             }
@@ -759,7 +763,8 @@ namespace bnet::base {
             error_code rec;
             try {
                 auto& buffer = this->derive_.ws_buffer();
-                while (this->derive_.is_started()) {
+                auto dself = this->derive_.self_shared_ptr();
+                while (dself->is_started()) {
                     auto [ec, nrecv] = co_await this->derive_.stream().async_read(buffer, asio::as_tuple(asio::use_awaitable));
                     if (ec) {
                         asio::detail::throw_error(ec);
@@ -824,7 +829,7 @@ namespace bnet::base {
                 int ret = kcp::ikcp_send(this->derive_.kcp(), (const char *)buffer.data(), (int)buffer.size());
 
 			    switch (ret) {
-			    case  0: break;//asio::detail::throw_error(error_code{}                        ); break;
+			    case  0: break;
 			    case -1: asio::detail::throw_error(asio::error::invalid_argument       ); break;
 			    case -2: asio::detail::throw_error(asio::error::no_memory              ); break;
 			    default: asio::detail::throw_error(asio::error::operation_not_supported); break;
@@ -893,7 +898,8 @@ namespace bnet::base {
         inline asio::awaitable<void> send_t() {
             error_code rec;
             try {
-                while (this->derive_.is_started()) {
+                auto dself = this->derive_.self_shared_ptr();
+                while (dself->is_started()) {
                     co_await this->dequeue(*this);
                 }
             }
@@ -908,7 +914,8 @@ namespace bnet::base {
 		inline asio::awaitable<void> recv_t() requires is_cli_c<SvrOrCli> {
             error_code rec;
             try {
-                while (this->derive_.is_started()) {
+                auto dself = this->derive_.self_shared_ptr();
+                while (dself->is_started()) {
                     //this->buffer_.wr_reserve(init_buffer_size_);
                     //this->buffer_.reset();
                     auto [ec, nrecv] = co_await this->derive_.socket().async_receive(asio::mutable_buffer(this->buffer_.wr_buf(), this->buffer_.wr_size()), 
@@ -938,13 +945,12 @@ namespace bnet::base {
             }
 		}
 
-        inline asio::awaitable<error_code> recv_t() requires is_svr_c<SvrOrCli> {
+        inline asio::awaitable<void> recv_t() requires is_svr_c<SvrOrCli> {
             //auto ptr = this->derive_.self_shared_ptr();
             //auto ec = this->derive_.kcp_handle_recv_t(ptr, ec);
             //if (ec) {
             //    co_return ec;
             //}
-
             auto ec = this->handle_recv(ec_ignore, std::string_view(reinterpret_cast<
 				std::string_view::const_pointer>(this->buffer_.rd_buf()), this->buffer_.rd_size()));
             if (ec) {
