@@ -2,11 +2,8 @@
 
 #include "bnet.hpp"
 #include "other.hpp"
-#include "testtool.hpp"
 
 using namespace bnet;
-
-static tst_tool tsttool;
 
 template<class SvrType>
 class svr_proxy : public SvrType {
@@ -32,7 +29,6 @@ public:
 		});
 		this->bind(event::recv, [&]([[maybe_unused]]session_ptr_type& ptr, std::string_view&& s) {
 			ptr->send(std::move(s));
-			tsttool.add_count();
 		});
 	}
 
@@ -93,7 +89,6 @@ void proxy_tst(asio::io_context& io) {
     	svr.set_dh_buffer(dh);
 	}
 	svr.start();
-	tsttool.test_timer(io);
 
     // cli
     static auto cli = cli_proxy<CliType>(ccfg);
