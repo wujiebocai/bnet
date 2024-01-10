@@ -59,22 +59,6 @@ namespace bnet::base {
 			}, asio::detached);
 		}
 
-		template<bool IsKeepAlive = false>
-		inline bool reconn() {
-			if (!is_stopped()) {
-				return false;
-			}
-
-			asio::co_spawn(this->cio_.context(), [this, self = self_shared_ptr()]() -> asio::awaitable<void> { 
-				auto reconn_interval = (globalctx_.cli_cfg_.reconn_interval > 0 ? globalctx_.cli_cfg_.reconn_interval : 3);
-				co_await async_sleep(co_await asio::this_coro::executor, std::chrono::seconds(reconn_interval), asio::use_awaitable);
-				co_await this->template co_start<IsKeepAlive>(this->host_, this->port_);
-				co_return;
-			}, asio::detached);
-			
-			return true;
-		}
-
 		//imp
 		inline auto self_shared_ptr() { return this->shared_from_this(); }
 		//inline asio::streambuf& buffer() { return buffer_; }
@@ -215,7 +199,7 @@ namespace bnet::base {
                     estate expected_stopping = estate::stopping;
 					if (this->state_.compare_exchange_strong(expected_stopping, estate::stopped)) {
 						globalctx_.bind_func_->call(event::disconnect, dptr, ec);
-						if (ec && globalctx_.cli_cfg_.is_reconn) this->reconn();
+						if (ec && globalctx_.cli_cfg_.is_reconn) co_await this->co_reconnect();
 					}
 
                     co_return ec_ignore;
@@ -293,6 +277,13 @@ namespace bnet::base {
 				co_return e.code();
 			}
         }
+
+		template<bool IsKeepAlive = false>
+		inline asio::awaitable<error_code> co_reconnect() {
+			auto reconn_interval = (globalctx_.cli_cfg_.reconn_interval > 0 ? globalctx_.cli_cfg_.reconn_interval : 3);
+			co_await async_sleep(co_await asio::this_coro::executor, std::chrono::seconds(reconn_interval), asio::use_awaitable);
+			co_return co_await this->template co_start<IsKeepAlive>(this->host_, this->port_);
+		}
 
 		inline auto& globalctx() { return globalctx_; }
 		inline const auto& state() { return state_; }

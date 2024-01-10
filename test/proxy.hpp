@@ -62,9 +62,6 @@ public:
 
 		this->bind(event::disconnect, []([[maybe_unused]]session_ptr_type& ptr, error_code ec) {
 			std::cout << "client disconnect " << ec.message() << std::endl;
-			if (ec) { // reconnection
-				ptr->reconn();
-			}
 		});
 
 		this->bind(event::recv, []([[maybe_unused]]session_ptr_type& ptr, std::string_view&& s) {
