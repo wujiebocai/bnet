@@ -11,6 +11,7 @@
 #include "tool/func_proxy.hpp"
 #include "tool/bytebuffer.hpp"
 #include "tool/util.hpp"
+#include "tool/function_traits.hpp"
 #include "base/define.hpp"
 #include "base/error.hpp"
 #include "base/helper.hpp"
@@ -49,6 +50,7 @@ namespace bnet::base {
 		}
 
 		~server() {
+			this->stop();
 			this->iopool_.stop();
 		}
 
@@ -60,7 +62,6 @@ namespace bnet::base {
 			asio::co_spawn(this->accept_io_.context(), co_stop(ec), asio::detached);
 		}
 
-	//protected:
 		inline asio::awaitable<bool> co_start(std::string_view host, std::string_view service) {
 			try {
 				clear_last_error();

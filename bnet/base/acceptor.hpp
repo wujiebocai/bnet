@@ -25,9 +25,7 @@ namespace bnet::base {
 			, acceptor_timer_(this->cio_.context())
 		{}
 
-		~acceptor() {
-			this->acceptor_stop();
-		}
+		~acceptor() {}
 
         inline asio::awaitable<error_code> acceptor_start(std::string_view host, std::string_view port) {
             try {
@@ -97,21 +95,18 @@ namespace bnet::base {
             	        session_ptr->start();
             	    }
             	    else {
-            	        if (ec == asio::error::operation_aborted) {
+            	        if (ec == asio::error::operation_aborted ||
+							ec == asio::error::bad_descriptor) {
             	            asio::detail::throw_error(ec);
 						    co_return;
 					    }
 
-            	        //steady_timer timer(co_await this_coro::executor);
-            	        //timer.expires_after(100ms);
-						//constexpr asio::steady_timer::duration interval = 100ms;
             	        this->acceptor_timer_.expires_after(std::chrono::milliseconds(100));
             	        co_await this->acceptor_timer_.async_wait(asio::use_awaitable);
             	    }
             	}
 			}
 			catch (system_error & e) {
-				//set_last_error(e);
 				this->server_.stop(e.code());
 			}
 			co_return;

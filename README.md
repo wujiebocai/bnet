@@ -1,17 +1,16 @@
-## 设计目的：
-   实现一套小白都可以轻易使用的高性能，能满足大部分场景的服务器引擎框架，底层组件采用cpp编写，业务支持cpp，lua，pyton等多种语言开发，bnet作为该框架的网络库。
+## Objective：
+   To achieve a set of small white can easily use high-performance, can meet most scenarios of the server engine framework, the underlying components are written by cpp, business support cpp, lua, pyton and other languages development, bnet as the framework of the network library.
 
-## 特性：
+## Features：
 
-1. 代码可复用性高，降低服务器引擎框架(后续会提供)代码生成工具编写的复杂度。
-2. 支持tcp, tcps, udp, kcp, websocket, websockets, http, https等协议。
-3. 高性能，接口简单，容易使用；该库基于asio的再次封装，提供更简便的使用方式，并且基本不损失asio库本身的性能；
-   各种协议对外提供的接口基本一致，不需要关心不同协议用法上的差异性。
-4. 基于c++20协程，实现同步逻辑取代异步回调。
-5. 具体用法参考test/proxy.hpp等。
+1. High code reusability reduces the complexity of writing code generation tools for the server engine framework (provided later).
+2. Support tcp, tcps, udp, kcp, websocket, websockets, http, https and other protocols.
+3. High performance, simple interface, easy to use.
+4. Based on c++20 coroutines, synchronization logic is realized.
+5. For details, see test/proxy.hpp.
 
-## 使用：
+## Use：
 
-	包含bnet.hpp头文件即可使用。
+	Include the bnet.hpp header file to use.
 
-详细文档后续更新，并会持续集成新功能及相关代码优化。
+Detailed documentation will be updated and new features and related code optimizations will be integrated on an ongoing basis.

@@ -89,4 +89,14 @@ namespace bnet::base {
 	concept is_co_spawn_cb = requires(T a, std::exception_ptr ex) {
     	{ a(ex, error_code()) } -> std::same_as<void>;
 	};
+
+    template<typename Proto>
+    concept is_rpc_proto = requires(Proto p) { 
+        typename Proto::req_header;
+        typename Proto::rsp_header;
+        requires requires(typename Proto::req_header req, typename Proto::rsp_header rsp) {
+            { req.length } -> std::convertible_to<uint32_t>;
+            { rsp.length } -> std::convertible_to<uint32_t>;
+        };
+    };
 }

@@ -280,28 +280,6 @@ namespace bnet::base {
 		SocketType socket_;
 	};
 
-/*
-#if defined(BNET_ENABLE_SSL)
-	template<class SocketType>
-	class bssl_socket 
-		: public bsocket<typename SocketType::next_layer_type>
-		, public SocketType {
-	public:
-		using socket_type = typename SocketType::next_layer_type;
-		using bsocket_type = bsocket<socket_type>;
-		using ssl_socket = SocketType;
-
-		template<class ...Args>
-		explicit bssl_socket(asio::ssl::context& ctx, Args&&... args) 
-			: bsocket_type(std::forward<Args>(args)...)
-			, ssl_socket(bsocket_type::socket(), ctx)
-		{}
-
-		inline ssl_socket& socket() { return *this; }
-
-	};
-#endif
-*/
 	template<typename SocketType>
 	class bws_socket 
 		: public bsocket<typename SocketType::next_layer_type>
@@ -317,18 +295,6 @@ namespace bnet::base {
 		}
 
 		~bws_socket() = default;
-
-		//using socket_type = typename SocketType::next_layer_type;
-		//using super = bsocket<SocketType>;
-		//using super::super;
-
-		//inline socket_type & socket() noexcept {
-		//	return super::socket().lowest_layer();
-		//}
-
-		//inline const socket_type & socket() const noexcept {
-		//	return super::socket().lowest_layer();
-		//}
 
 		inline auto & stream() {
 			return *this;

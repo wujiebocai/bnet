@@ -38,10 +38,10 @@ namespace bnet::base {
 
 		~session() = default;
 
-		template<bool iskeepalive = false>
+		template<bool IsKeepAlive = false>
 		inline void start() {
 			asio::co_spawn(this->cio_.context(), [this, self = self_shared_ptr()]() { 
-				return self->template co_start<iskeepalive>();
+				return self->template co_start<IsKeepAlive>();
 			}, asio::detached);
 		}
 
@@ -69,8 +69,6 @@ namespace bnet::base {
 		//imp
 		inline auto self_shared_ptr() { return this->shared_from_this(); }
 		inline nio& cio() { return cio_; }
-		//inline void set_first_pack(std::string&& str) { first_pack_ = std::move(str); }
-		//inline auto& get_first_pack() { return first_pack_; }
 		inline dynamic_buffer<>& rbuffer() { return rbuff_; }
 		inline auto& bind_func() { return globalctx_.bind_func_; }
 
@@ -89,8 +87,8 @@ namespace bnet::base {
 		inline void user_data_reset() {
 			this->user_data_.reset();
 		}
-	//protected:
-		template<bool iskeepalive = false>
+
+		template<bool IsKeepAlive = false>
 		inline asio::awaitable<error_code> co_start() {
 			error_code rec;
 			try {
@@ -98,7 +96,7 @@ namespace bnet::base {
 				if (!this->state_.compare_exchange_strong(expected, estate::starting))
 					asio::detail::throw_error(asio::error::already_started);
 
-				if constexpr (iskeepalive)
+				if constexpr (IsKeepAlive)
 					this->keep_alive_options();
 
 				const auto& sptr = this->shared_from_this();

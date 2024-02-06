@@ -37,6 +37,7 @@ namespace bnet::base {
 		}
 
 		~client() {
+			this->stop();
 			this->iopool_.stop();
 		}
 
@@ -147,6 +148,7 @@ namespace bnet::base {
 		}
 
         //inline auto self_shared_ptr() { return this->shared_from_this(); }
+		inline auto& globalctx() { return globalctx_; }
 	protected:
 		inline void stop_t(const error_code& ec) {
             set_last_error(ec);
@@ -165,7 +167,6 @@ namespace bnet::base {
             return;
         }
 
-		inline auto& globalctx() { return globalctx_; }
 	protected:
 		nio & cio_; 
 		global_ctx_type globalctx_;

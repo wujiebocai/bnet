@@ -98,8 +98,7 @@ namespace bnet::base {
 			std::random_device rd;
     		std::mt19937 gen(rd());
 
-    		std::uniform_int_distribution<int> distribution(0, sessions_.size() - 1); // 适当调整范围
-    		//int randomIndex = distribution(gen);
+    		std::uniform_int_distribution<int> distribution(0, sessions_.size() - 1); 
 			auto random_it = std::next(std::begin(sessions_), distribution(gen));
 			return (random_it == this->sessions_.end() ? session_ptr() : random_it->second);
 		}
