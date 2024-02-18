@@ -99,4 +99,23 @@ namespace bnet::base {
             { rsp.length } -> std::convertible_to<uint32_t>;
         };
     };
+
+    template<typename Proto>
+    concept is_txt_proto_match = requires(typename Proto::result_type ret) { 
+        { Proto::match_func(asio::buffers_iterator<asio::streambuf::const_buffers_type>{}, asio::buffers_iterator<asio::streambuf::const_buffers_type>{}, ret) } -> 
+            std::same_as<std::pair<asio::buffers_iterator<asio::streambuf::const_buffers_type>, bool>>;
+    };
+
+    template<typename Proto>
+    concept is_txt_proto_cli_delim = requires { 
+        { Proto::cli_delim() } -> std::convertible_to<std::string>;
+    };
+
+    template<typename Proto>
+    concept is_txt_proto_svr_delim = requires { 
+        { Proto::svr_delim() } -> std::convertible_to<std::string>;
+    };
+
+    template<typename Proto>
+    concept is_txt_proto = is_txt_proto_match<Proto> || is_txt_proto_cli_delim<Proto>;
 }

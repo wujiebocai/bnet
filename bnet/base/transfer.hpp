@@ -1060,9 +1060,9 @@ namespace bnet::base {
                 rec = e.code();
             }
             catch (std::exception&) { set_last_error(asio::error::eof); }
-            if (rec) {
-                co_await this->derive_.co_stop(rec);
-            }
+            //if (rec) {
+            //    co_await this->derive_.co_stop(rec);
+            //}
 
             co_return rec;
         }
@@ -1194,6 +1194,241 @@ namespace bnet::base {
     protected:
         DriverType& derive_;
         dynamic_buffer<> buffer_;
+        asio::steady_timer timer_;
+        bool enable_check_timeout_ = false;
+    };
+
+    template<class DriverType, class StreamType, class ProtoType, class SvrOrCli> 
+    requires is_txt_proto<ProtoType> && is_tcp_by_stream<StreamType>
+	class transfer<DriverType, StreamType, ProtoType, SvrOrCli> : public normal_queue {
+    public:
+        using transfer_type = transfer<DriverType, StreamType, ProtoType, SvrOrCli>;
+	public:
+		transfer([[maybe_unused]]nio & io, [[maybe_unused]] std::size_t max_buffer_size)
+			: normal_queue(io)
+            , derive_(static_cast<DriverType&>(*this))
+            , timer_(io.context()) { }
+
+		~transfer() = default;
+
+        template<class CbFunc, class Buffer>
+        inline void request(CbFunc&& f, Buffer&& buffer) requires is_cli_c<SvrOrCli> {
+            this->enqueue([this, f = std::move(f), buffer = data_conv(std::move(buffer))]() -> asio::awaitable<error_code> {
+                using result_type = last_parameters_type_t<CbFunc>;
+                result_type ret;
+
+                auto req_timout = (derive_.globalctx().cli_cfg_.request_timout > 0 ? derive_.globalctx().cli_cfg_.request_timout : 5);
+                timer_.expires_after(std::chrono::seconds(req_timout));
+                std::variant<error_code, std::monostate> rets = co_await (this->co_request(ret, std::move(buffer)) || timer_.async_wait(asio::use_awaitable));
+                timer_.cancel();
+
+                error_code ec;
+                switch (rets.index()) {
+                case 0: ec = std::get<0>(rets); break;
+                case 1: ec = asio::error::timed_out; break;
+                //case std::variant_npos: ec = asio::error::operation_aborted; break;
+                default: ec = asio::error::operation_aborted; break;
+                }
+
+                f(this->derive_.self_shared_ptr(), ec, ret);
+
+                if (ec) {
+                    co_await this->derive_.co_stop(ec);
+                }
+
+                co_return ec; 
+            });
+		}
+
+        template<class Buffer>
+        inline void response(Buffer&& buffer) requires is_svr_c<SvrOrCli> {
+            this->enqueue([this, buffer = data_conv(std::move(buffer))]() -> asio::awaitable<error_code> {
+                return this->co_response(std::move(buffer));
+            });
+		}
+
+    protected:
+        template<class Result, class Buffer>
+        inline asio::awaitable<error_code> co_request(Result&& ret, Buffer&& buffer) requires is_cli_c<SvrOrCli> && is_txt_proto_match<ProtoType> {
+            error_code rec;
+            using iterator = asio::buffers_iterator<asio::streambuf::const_buffers_type>;
+		    //using diff_type = typename iterator::difference_type;
+            try {
+                if (!this->derive_.is_started())
+                    asio::detail::throw_error(asio::error::not_connected);
+
+                auto [ec, len] = co_await asio::async_write(this->derive_.socket(),
+                        asio::buffer(std::move(buffer)), asio::as_tuple(asio::use_awaitable));
+                if (ec) {
+                    asio::detail::throw_error(ec);
+                }
+
+                std::function<std::pair<iterator, bool>(iterator begin, iterator end)> match_function = [&ret](iterator begin, iterator end) -> std::pair<iterator, bool> {
+                    return ProtoType::match_func(begin, end, ret);
+                };
+
+                this->read_buf_.consume(this->read_buf_.size());
+                std::tie(ec, len) = co_await asio::async_read_until(this->derive_.socket(), read_buf_, match_function,
+                                                    asio::as_tuple(asio::use_awaitable));
+                if (ec) {
+                    asio::detail::throw_error(ec);
+                }
+
+                //this->read_buf_.consume(len);
+            }
+            catch (system_error& e) {
+                rec = e.code();
+            }
+            catch (std::exception&) { set_last_error(asio::error::eof); }
+
+            co_return rec;
+        }
+
+        template<class Result, class Buffer>
+        inline asio::awaitable<error_code> co_request(Result&& ret, Buffer&& buffer) requires is_cli_c<SvrOrCli> && is_txt_proto_cli_delim<ProtoType> {
+            error_code rec;
+            try {
+                if (!this->derive_.is_started())
+                    asio::detail::throw_error(asio::error::not_connected);
+
+                auto [ec, len] = co_await asio::async_write(this->derive_.socket(),
+                        asio::buffer(std::move(buffer)), asio::as_tuple(asio::use_awaitable));
+                if (ec) {
+                    asio::detail::throw_error(ec);
+                }
+
+                this->read_buf_.consume(this->read_buf_.size());
+                std::tie(ec, len) = co_await asio::async_read_until(this->derive_.socket(), read_buf_, ProtoType::cli_delim(),
+                                                    asio::as_tuple(asio::use_awaitable));
+                if (ec) {
+                    asio::detail::throw_error(ec);
+                }
+
+                //this->read_buf_.consume(len);
+            }
+            catch (system_error& e) {
+                rec = e.code();
+            }
+            catch (std::exception&) { set_last_error(asio::error::eof); }
+
+            co_return rec;
+        }
+
+        template<class Buffer>
+        inline asio::awaitable<error_code> co_response(Buffer&& buffer) requires is_svr_c<SvrOrCli> {
+            error_code rec;
+            try {
+                if (!this->derive_.is_started())
+                    asio::detail::throw_error(asio::error::not_connected);
+
+                auto [ec, nsent] = co_await asio::async_write(this->derive_.socket(),
+                        asio::buffer(std::move(buffer)), asio::as_tuple(asio::use_awaitable));
+                if (ec) {
+                    asio::detail::throw_error(ec);
+                }
+
+                co_return rec;
+            }
+            catch (system_error& e) {
+                rec = e.code();
+            }
+            catch (std::exception&) { set_last_error(asio::error::eof); }
+            if (rec) {
+                co_await this->derive_.co_stop(rec);
+            }
+
+            co_return rec;
+        }
+
+        inline void transfer_start() {
+            normal_queue::init();
+            asio::co_spawn(this->derive_.cio().context(), send_t(), asio::detached);
+            if constexpr (is_svr_c<SvrOrCli>) 
+                asio::co_spawn(this->derive_.cio().context(), recv_t(), asio::detached);
+		}
+        inline void transfer_stop() {
+            normal_queue::uninit();
+            timer_.cancel();
+        }
+
+        inline asio::awaitable<void> recv_t() requires is_svr_c<SvrOrCli> {
+            error_code rec;
+            try {
+                std::string delim("\r\n");
+                if constexpr (is_txt_proto_svr_delim<ProtoType>) {
+                    delim = ProtoType::svr_delim();
+                }
+                auto dself = this->derive_.self_shared_ptr();
+                while (dself->is_started()) {
+                    reset_timer();
+                    auto [ec, len] = co_await asio::async_read_until(this->derive_.socket(), read_buf_, delim,
+                                                        asio::as_tuple(asio::use_awaitable));
+                    cancel_timer();
+                    if (ec) {
+                        asio::detail::throw_error(ec);
+                    }
+
+                    this->handle_recv(ec, std::string_view(reinterpret_cast<
+						    std::string_view::const_pointer>(this->read_buf_.data().data()), len));
+                    
+                    this->read_buf_.consume(this->read_buf_.size());
+                }
+            }
+            catch (system_error& e) {
+                rec = e.code();
+            }
+            if (rec) {
+                co_await this->derive_.co_stop(rec);
+            }
+		}
+
+        void reset_timer() {
+            if (!enable_check_timeout_) {
+                return;
+            }
+
+            timer_.expires_after(std::chrono::seconds(5));
+            timer_.async_wait(
+                [this, self = this->derive_.shared_from_this()](asio::error_code const &ec) {
+                if (!ec) {
+                    std::cout << "close session timeout" << std::endl;
+                    self->stop(asio::error::timed_out);
+                }
+            });
+        }
+
+        void cancel_timer() {
+            if (!enable_check_timeout_) {
+                return;
+            }
+
+            timer_.cancel();
+        }
+
+        inline void handle_recv(error_code ec, const std::string_view& s) {
+            std::ignore = ec;
+			this->derive_.bind_func()->call(event::recv, this->derive_.self_shared_ptr(), ec, std::move(s));
+		}
+
+        inline asio::awaitable<void> send_t() {
+            error_code rec;
+            try {
+                auto dself = this->derive_.self_shared_ptr();
+                while (dself->is_started()) {
+                    co_await this->dequeue();
+                }
+            }
+            catch (system_error& e) {
+                rec = e.code();
+            }
+            if (rec) {
+                co_await this->derive_.co_stop(rec);
+            }
+        }
+
+    protected:
+        DriverType& derive_;
+        asio::streambuf read_buf_;
         asio::steady_timer timer_;
         bool enable_check_timeout_ = false;
     };

@@ -5,6 +5,15 @@
 #include <deque>
 
 namespace bnet::base {
+    template<class DataType>
+	inline auto data_conv(DataType&& data) {
+        if constexpr (is_c_str_c<DataType>) {
+            return std::string(data);
+        } else {
+            return std::move(data);
+        }
+    }
+
     struct normal_queue { 
         using FunType = std::function<asio::awaitable<error_code>()>;
         normal_queue(nio& io) 
