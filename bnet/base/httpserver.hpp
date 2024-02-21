@@ -7,6 +7,7 @@
 #pragma once
 
 namespace bnet::base {
+#if defined(BNET_ENABLE_HTTP)
 	template<class StreamType, class ProtoType>
 	class http_server : public server<StreamType, ProtoType> {
     public:
@@ -146,4 +147,5 @@ namespace bnet::base {
             return this->globalctx_.handle_func(http::verb::unlink, path, func);
         }
     };
+#endif
 }

@@ -7,6 +7,7 @@
 #pragma once
 
 namespace bnet::base {
+#if defined(BNET_ENABLE_HTTP)
 	template<class StreamType, class ProtoType>
 	class http_client : public client<StreamType, ProtoType> {
     public:
@@ -55,4 +56,5 @@ namespace bnet::base {
             return true;
         }
     };
+#endif
 }

@@ -7,6 +7,7 @@
 #pragma once
 
 #include <shared_mutex>
+#include <random>
 
 namespace bnet::base {
 	template<class SessionType>
