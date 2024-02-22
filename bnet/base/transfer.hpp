@@ -1050,7 +1050,7 @@ namespace bnet::base {
                     asio::detail::throw_error(ec);
                 }
 
-                this->buffer_.rd_flip(len);
+                this->buffer_.wr_flip(len);
 
                 co_return rec;
             }
@@ -1077,11 +1077,10 @@ namespace bnet::base {
                 if constexpr (is_pack_rsp) 
                     asio::detail::throw_error(asio::error::invalid_argument);
 
-                this->buffer_.reset();
-                ProtoType::pack_rsp(this->buffer_, std::forward<Args>(args)...);
-                
+                buffer_type buffer;
+                ProtoType::pack_rsp(buffer, std::forward<Args>(args)...);
                 auto [ec, nsent] = co_await asio::async_write(this->derive_.socket(),
-                        asio::buffer(this->buffer_.rd_buf(), this->buffer_.rd_size()), asio::as_tuple(asio::use_awaitable));
+                        asio::buffer(buffer.rd_buf(), buffer.rd_size()), asio::as_tuple(asio::use_awaitable));
                 if (ec) {
                     asio::detail::throw_error(ec);
                 }
@@ -1113,7 +1112,7 @@ namespace bnet::base {
                     }
 
                     uint32_t body_len = req_header_.length;
-                    this->buffer_.reset();
+                    //this->buffer_.reset();
                     this->buffer_.wr_reserve(body_len);
                     std::tie(ec, nrecv) = co_await asio::async_read(this->derive_.socket(), asio::buffer(this->buffer_.wr_buf(), body_len), 
                                                     asio::as_tuple(asio::use_awaitable));
