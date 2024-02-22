@@ -996,7 +996,7 @@ namespace bnet::base {
                 default: ec = asio::error::operation_aborted; break;
                 }
 
-                f(this->derive_.self_shared_ptr(), ec, std::string_view(reinterpret_cast<
+                f(this->derive_.self_shared_ptr(), ec, rsp_header_,std::string_view(reinterpret_cast<
 						    std::string_view::const_pointer>(this->buffer_.rd_buf()), this->buffer_.rd_size()));
 
                 if (ec) {
@@ -1035,15 +1035,13 @@ namespace bnet::base {
                     asio::detail::throw_error(ec);
                 }
 
-                typename ProtoType::rsp_header header;
-                //constexpr head_size = sizeof(ProtoType::rsp_header);
-                std::tie(ec, len) = co_await asio::async_read(this->derive_.socket(), asio::buffer((char *)&header, ProtoType::RSP_HEAD_SIZE), 
+                std::tie(ec, len) = co_await asio::async_read(this->derive_.socket(), asio::buffer((char *)&rsp_header_, ProtoType::RSP_HEAD_SIZE), 
                                                     asio::as_tuple(asio::use_awaitable));
                 if (ec) {
                     asio::detail::throw_error(ec);
                 }
 
-                uint32_t body_len = header.length;
+                uint32_t body_len = rsp_header_.length;
                 this->buffer_.reset();
                 this->buffer_.wr_reserve(body_len);
                 std::tie(ec, len) = co_await asio::async_read(this->derive_.socket(), asio::buffer(this->buffer_.wr_buf(), body_len), 
@@ -1106,16 +1104,15 @@ namespace bnet::base {
             try {
                 auto dself = this->derive_.self_shared_ptr();
                 while (dself->is_started()) {
-				    typename ProtoType::req_header header;
                     reset_timer();
-                    auto [ec, nrecv] = co_await asio::async_read(this->derive_.socket(), asio::buffer((char *)&header, ProtoType::REQ_HEAD_SIZE), 
+                    auto [ec, nrecv] = co_await asio::async_read(this->derive_.socket(), asio::buffer((char *)&req_header_, ProtoType::REQ_HEAD_SIZE), 
                                                     asio::as_tuple(asio::use_awaitable));
                     cancel_timer();
                     if (ec) {
                         asio::detail::throw_error(ec);
                     }
 
-                    uint32_t body_len = header.length;
+                    uint32_t body_len = req_header_.length;
                     this->buffer_.reset();
                     this->buffer_.wr_reserve(body_len);
                     std::tie(ec, nrecv) = co_await asio::async_read(this->derive_.socket(), asio::buffer(this->buffer_.wr_buf(), body_len), 
@@ -1124,7 +1121,7 @@ namespace bnet::base {
                         asio::detail::throw_error(ec);
                     }
 
-                    this->handle_recv(ec, header, std::string_view(reinterpret_cast<
+                    this->handle_recv(ec, req_header_, std::string_view(reinterpret_cast<
 						    std::string_view::const_pointer>(this->buffer_.rd_buf()), nrecv));
                 }
             }
@@ -1160,7 +1157,7 @@ namespace bnet::base {
         }
 
         inline void handle_recv(error_code ec, typename ProtoType::req_header& header, const std::string_view& s) {
-            std::ignore = ec;
+            //std::ignore = ec;
 			this->derive_.bind_func()->call(event::recv, this->derive_.self_shared_ptr(), ec, header, std::move(s));
 		}
 
@@ -1193,6 +1190,8 @@ namespace bnet::base {
 
     protected:
         DriverType& derive_;
+        typename ProtoType::req_header req_header_;
+        typename ProtoType::rsp_header rsp_header_;
         dynamic_buffer<> buffer_;
         asio::steady_timer timer_;
         bool enable_check_timeout_ = false;
