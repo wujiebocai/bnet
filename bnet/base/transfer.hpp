@@ -1025,7 +1025,7 @@ namespace bnet::base {
                 using buffer_type = dynamic_buffer<>;
                 constexpr bool is_pack_req = requires { ProtoType::pack_req(buffer_type{}, std::forward<Args>(args)...); };
                 if constexpr (is_pack_req) 
-                    asio::detail::throw_error(asio::error::invalid_argument);
+                    asio::detail::throw_error(asio::error::no_protocol_option);
                 
                 this->buffer_.reset();
                 ProtoType::pack_req(this->buffer_, std::forward<Args>(args)...);
@@ -1075,7 +1075,7 @@ namespace bnet::base {
                 using buffer_type = dynamic_buffer<>;
                 constexpr bool is_pack_rsp = requires { ProtoType::pack_rsp(buffer_type{}, std::forward<Args>(args)...); };
                 if constexpr (is_pack_rsp) 
-                    asio::detail::throw_error(asio::error::invalid_argument);
+                    asio::detail::throw_error(asio::error::no_protocol_option);
 
                 buffer_type buffer;
                 ProtoType::pack_rsp(buffer, std::forward<Args>(args)...);

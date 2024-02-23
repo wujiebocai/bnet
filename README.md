@@ -4,7 +4,7 @@
 ## Features：
 
 1. High code reusability reduces the complexity of writing code generation tools for the server engine framework (provided later).
-2. Support tcp, tcps, udp, kcp, websocket, websockets, http, https, rpc, text and other protocols.
+2. Support tcp, tcps, udp, kcp, websocket, websockets, http, https, rpc, txt and other protocols.
 3. High performance, simple interface, easy to use.
 4. Based on c++20 coroutines, asynchronous logic is realized.
 5. For details, see test/proxy.hpp.

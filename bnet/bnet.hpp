@@ -39,7 +39,7 @@ namespace bnet {
 net：
 socket type: tcp, udp
 stream type: binary, ssl, kcp, ...
-protocol type: http, websocket, ...
+protocol type: http, websocket, rpc, txt, ...
 */
 
 namespace bnet {
@@ -125,5 +125,17 @@ using http_cli = base::http_client<tcp_binary_stream, http_proto_c>;
 using https_svr = base::http_server<tcp_ssl_stream, http_proto_s>;
 using https_cli = base::http_client<tcp_ssl_stream, http_proto_c>;
 #endif
+
+// rpc
+template<typename rpc_protocol>
+using rpc_svr = base::client<tcp_binary_stream, rpc_protocol>;
+template<typename rpc_protocol>
+using rpc_cli = base::client<tcp_binary_stream, rpc_protocol>;
+
+// txt
+template<typename txt_protocol>
+using txt_svr = base::client<tcp_binary_stream, txt_protocol>;
+template<typename txt_protocol>
+using txt_cli = base::client<tcp_binary_stream, txt_protocol>;
 
 }
