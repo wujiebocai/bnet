@@ -128,13 +128,13 @@ using https_cli = base::http_client<tcp_ssl_stream, http_proto_c>;
 
 // rpc
 template<typename rpc_protocol>
-using rpc_svr = base::client<tcp_binary_stream, rpc_protocol>;
+using rpc_svr = base::server<tcp_binary_stream, rpc_protocol>;
 template<typename rpc_protocol>
 using rpc_cli = base::client<tcp_binary_stream, rpc_protocol>;
 
 // txt
 template<typename txt_protocol>
-using txt_svr = base::client<tcp_binary_stream, txt_protocol>;
+using txt_svr = base::server<tcp_binary_stream, txt_protocol>;
 template<typename txt_protocol>
 using txt_cli = base::client<tcp_binary_stream, txt_protocol>;
 
