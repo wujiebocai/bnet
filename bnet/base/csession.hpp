@@ -48,8 +48,10 @@ namespace bnet::base {
         template<bool IsKeepAlive = false, typename Fun> 
 		requires is_co_spawn_cb<Fun> || std::same_as<unqualified_t<Fun>, asio::detached_t>
 		inline void start(std::string_view host, std::string_view port, Fun&& func) {
-			asio::co_spawn(this->cio_.context(), [self = self_shared_ptr(), host, port]() { 
-				return self->template co_start<IsKeepAlive>(host, port);
+			this->host_ = host;
+			this->port_ = port;
+			asio::co_spawn(this->cio_.context(), [self = self_shared_ptr()]() { 
+				return self->template co_start<IsKeepAlive>(self->host_, self->port_);
 			}, func);
 		}
 

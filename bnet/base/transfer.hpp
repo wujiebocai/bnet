@@ -360,8 +360,13 @@ namespace bnet::base {
                 default: ec = asio::error::operation_aborted; break;
                 }
 
+                if (ec) {
+                    co_await this->derive_.co_stop(ec);
+                    co_return ec;
+                }
+
                 f(ec, rep_);
-                if (ec) co_await this->derive_.co_stop(ec);
+
                 co_return ec;
             });
 		}
@@ -996,12 +1001,13 @@ namespace bnet::base {
                 default: ec = asio::error::operation_aborted; break;
                 }
 
-                f(this->derive_.self_shared_ptr(), ec, rsp_header_,std::string_view(reinterpret_cast<
-						    std::string_view::const_pointer>(this->buffer_.rd_buf()), this->buffer_.rd_size()));
-
                 if (ec) {
                     co_await this->derive_.co_stop(ec);
+                    co_return ec;
                 }
+
+                f(this->derive_.self_shared_ptr(), ec, rsp_header_,std::string_view(reinterpret_cast<
+						    std::string_view::const_pointer>(this->buffer_.rd_buf()), this->buffer_.rd_size()));
 
                 co_return ec; 
             });
@@ -1228,11 +1234,12 @@ namespace bnet::base {
                 default: ec = asio::error::operation_aborted; break;
                 }
 
-                f(this->derive_.self_shared_ptr(), ec, ret);
-
                 if (ec) {
                     co_await this->derive_.co_stop(ec);
+                    co_return ec;
                 }
+
+                f(this->derive_.self_shared_ptr(), ec, ret);
 
                 co_return ec; 
             });
