@@ -54,12 +54,14 @@ namespace bnet::base {
 			this->iopool_.stop();
 		}
 
-        inline void start() {
-			asio::co_spawn(this->accept_io_.context(), co_start(globalctx_.svr_cfg_.host, globalctx_.svr_cfg_.port), asio::detached);
+		template<typename CompletionToken = asio::detached_t> 
+        inline void start(const CompletionToken& token = asio::detached) {
+			asio::co_spawn(this->accept_io_.context(), co_start(globalctx_.svr_cfg_.host, globalctx_.svr_cfg_.port), token);
         }
-
-		inline void stop(const error_code& ec = ec_ignore) {
-			asio::co_spawn(this->accept_io_.context(), co_stop(ec), asio::detached);
+		
+		template<typename CompletionToken = asio::detached_t> 
+		inline void stop(const error_code& ec = ec_ignore, const CompletionToken& token = asio::detached) {
+			asio::co_spawn(this->accept_io_.context(), co_stop(ec), token);
 		}
 
 		inline asio::awaitable<bool> co_start(std::string_view host, std::string_view service) {

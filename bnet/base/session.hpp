@@ -38,17 +38,18 @@ namespace bnet::base {
 
 		~session() = default;
 
-		template<bool IsKeepAlive = false>
-		inline void start() {
+		template<bool IsKeepAlive = false, typename CompletionToken = asio::detached_t>
+		inline void start(const CompletionToken& token = asio::detached) {
 			asio::co_spawn(this->cio_.context(), [this, self = self_shared_ptr()]() { 
 				return self->template co_start<IsKeepAlive>();
-			}, asio::detached);
+			}, token);
 		}
 
-		inline void stop(const error_code& ec = ec_ignore) {
+		template<typename CompletionToken = asio::detached_t> 
+		inline void stop(const error_code& ec = ec_ignore, const CompletionToken& token = asio::detached) {
 			asio::co_spawn(this->cio_.context(), [this, self = self_shared_ptr(), ec = std::move(ec)]() { 
 				return self->co_stop(ec);
-			}, asio::detached);
+			}, token);
 		}
 
 		inline bool is_started() const {
