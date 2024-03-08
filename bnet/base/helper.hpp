@@ -118,4 +118,11 @@ namespace bnet::base {
 
     template<typename Proto>
     concept is_txt_proto = is_txt_proto_match<Proto> || is_txt_proto_cli_delim<Proto>;
+
+    template<typename Proto>
+    concept is_not_datagram = requires {
+        typename Proto::result_type;
+        { Proto::is_not_datagram() } -> std::same_as<bool>;
+        requires Proto::is_not_datagram();
+    };
 }

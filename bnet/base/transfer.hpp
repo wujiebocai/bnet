@@ -1216,7 +1216,7 @@ namespace bnet::base {
 		~transfer() = default;
 
         template<class CbFunc, class Buffer>
-        inline void request(CbFunc&& f, Buffer&& buffer) requires is_cli_c<SvrOrCli> {
+        inline void request(CbFunc&& f, Buffer&& buffer) requires is_cli_c<SvrOrCli> && (!is_not_datagram<ProtoType>) {
             this->enqueue([this, f = std::move(f), buffer = data_conv(std::move(buffer))]() -> asio::awaitable<error_code> {
                 using result_type = last_parameters_type_t<CbFunc>;
                 result_type ret;
@@ -1246,9 +1246,16 @@ namespace bnet::base {
 		}
 
         template<class Buffer>
+        inline void request(Buffer&& buffer) requires is_cli_c<SvrOrCli> && is_not_datagram<ProtoType> {
+            this->enqueue([this, buffer = data_conv(std::move(buffer))]() -> asio::awaitable<error_code> {
+                return this->co_send(std::move(buffer));
+            });
+        }
+
+        template<class Buffer>
         inline void response(Buffer&& buffer) requires is_svr_c<SvrOrCli> {
             this->enqueue([this, buffer = data_conv(std::move(buffer))]() -> asio::awaitable<error_code> {
-                return this->co_response(std::move(buffer));
+                return this->co_send(std::move(buffer));
             });
 		}
 
@@ -1320,7 +1327,7 @@ namespace bnet::base {
         }
 
         template<class Buffer>
-        inline asio::awaitable<error_code> co_response(Buffer&& buffer) requires is_svr_c<SvrOrCli> {
+        inline asio::awaitable<error_code> co_send(Buffer&& buffer) {
             error_code rec;
             try {
                 if (!this->derive_.is_started())
@@ -1348,7 +1355,7 @@ namespace bnet::base {
         inline void transfer_start() {
             normal_queue::init();
             asio::co_spawn(this->derive_.cio().context(), send_t(), asio::detached);
-            if constexpr (is_svr_c<SvrOrCli>) 
+            if constexpr (is_svr_c<SvrOrCli> || ((is_cli_c<SvrOrCli> && is_not_datagram<ProtoType>))) 
                 asio::co_spawn(this->derive_.cio().context(), recv_t(), asio::detached);
 		}
         inline void transfer_stop() {
@@ -1377,6 +1384,51 @@ namespace bnet::base {
 						    std::string_view::const_pointer>(this->read_buf_.data().data()), len));
                     
                     this->read_buf_.consume(this->read_buf_.size());
+                }
+            }
+            catch (system_error& e) {
+                rec = e.code();
+            }
+            if (rec) {
+                co_await this->derive_.co_stop(rec);
+            }
+		}
+
+        inline asio::awaitable<void> recv_t() requires is_cli_c<SvrOrCli> && is_not_datagram<ProtoType> {
+            error_code rec;
+            try {
+                auto dself = this->derive_.self_shared_ptr();
+                if constexpr (is_txt_proto_match<ProtoType>) {
+                    using iterator = asio::buffers_iterator<asio::streambuf::const_buffers_type>;
+                    typename ProtoType::result_type ret;
+                    std::function<std::pair<iterator, bool>(iterator begin, iterator end)> match_function = [&ret](iterator begin, iterator end) -> std::pair<iterator, bool> {
+                        return ProtoType::match_func(begin, end, ret);
+                    };
+
+                    while (dself->is_started()) {
+                        //this->read_buf_.consume(this->read_buf_.size());
+                        auto [ec, len] = co_await asio::async_read_until(this->derive_.socket(), read_buf_, match_function,
+                                                    asio::as_tuple(asio::use_awaitable));
+                        if (ec) {
+                            asio::detail::throw_error(ec);
+                        }
+
+                        this->derive_.bind_func()->call(event::recv, this->derive_.self_shared_ptr(), ret);
+                        this->read_buf_.consume(len);
+                        ret.reset();
+                    }
+                }
+                else if constexpr (is_txt_proto_cli_delim<ProtoType>) {
+                    while (dself->is_started()) {
+                        auto [ec, len] = co_await asio::async_read_until(this->derive_.socket(), read_buf_, ProtoType::cli_delim(),
+                                                    asio::as_tuple(asio::use_awaitable));
+                        if (ec) {
+                            asio::detail::throw_error(ec);
+                        }
+                        this->derive_.bind_func()->call(event::recv, this->derive_.self_shared_ptr(), std::string_view(reinterpret_cast<
+						        std::string_view::const_pointer>(this->read_buf_.data().data()), len));
+                        this->read_buf_.consume(len);
+                    }
                 }
             }
             catch (system_error& e) {
