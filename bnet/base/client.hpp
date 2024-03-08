@@ -41,8 +41,8 @@ namespace bnet::base {
 			this->iopool_.stop();
 		}
 
-		template<bool IsAsync = true, bool IsKeepAlive = false>
-		inline bool add(std::string_view host, std::string_view port) {
+		template<typename CompletionToken = asio::detached_t, bool IsKeepAlive = false>
+		inline bool add(std::string_view host, std::string_view port, const CompletionToken& token = asio::detached) {
 			if (!is_started()) {
 				return false;
 			}
@@ -50,20 +50,7 @@ namespace bnet::base {
 			clear_last_error();
             
 			std::shared_ptr<session_type> session_ptr = this->make_session();
-			if constexpr (IsAsync) session_ptr->template start<IsKeepAlive>(host, port, asio::detached);
-			else {
-				std::promise<error_code> promise;
-				std::future<error_code> future = promise.get_future();
-				session_ptr->template start<IsKeepAlive>(host, port,
-					[&promise](std::exception_ptr ex, error_code ret) { 
-					if (ex) {}
-					promise.set_value(ret);
-    			});
-				//if (auto ret = future.wait_for(std::chrono::milliseconds(200)); ret != std::future_status::ready) {
-					//	return false;
-				//}
-				return bool(future.get());
-			}
+			session_ptr->template start<IsKeepAlive>(host, port, token);
 
             return true;
 		}
@@ -83,14 +70,7 @@ namespace bnet::base {
 				return false;
 			}
 
-			for (size_t i = 0; i < globalctx_.cli_cfg_.pool_size; i++) {
-				if (globalctx_.cli_cfg_.is_async) {
-					add(globalctx_.cli_cfg_.host, globalctx_.cli_cfg_.port);
-				}
-				else {
-					add<false>(globalctx_.cli_cfg_.host, globalctx_.cli_cfg_.port);
-				}
-			}
+			init_pool();
 
 			return (this->is_started());
 		}
@@ -166,6 +146,30 @@ namespace bnet::base {
 
             return;
         }
+
+		inline bool init_pool() {
+			for (size_t i = 0; i < globalctx_.cli_cfg_.pool_size; i++) {
+				if (globalctx_.cli_cfg_.is_async) {
+					add(globalctx_.cli_cfg_.host, globalctx_.cli_cfg_.port);
+				}
+				else {
+					std::promise<error_code> promise;
+					std::future<error_code> future = promise.get_future();
+					add(globalctx_.cli_cfg_.host, globalctx_.cli_cfg_.port, [&promise](std::exception_ptr ex, error_code ret) { 
+						if (ex) {}
+						promise.set_value(ret);
+    				});
+					//if (auto ret = future.wait_for(std::chrono::milliseconds(200)); ret != std::future_status::ready) {
+						//	return false;
+					//}
+					if (auto ec = future.get()) {
+						return false;
+					}
+				}
+			}
+
+			return true;
+		}
 
 	protected:
 		nio & cio_; 

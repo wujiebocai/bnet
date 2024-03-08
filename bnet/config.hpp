@@ -33,6 +33,8 @@ struct cli_cfg {
     // reconnection interval(s)
     std::size_t reconn_interval = 3;
     bool is_reconn = false;
+    // retry times of operations such as reconnection
+    int retry_num = 3;
     // for http request timeout(s)
     std::size_t request_timout = 3;
     std::size_t limit_buffer_size = 0;

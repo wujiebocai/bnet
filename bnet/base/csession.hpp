@@ -284,9 +284,17 @@ namespace bnet::base {
 
 		template<bool IsKeepAlive = false>
 		inline asio::awaitable<error_code> co_reconnect() {
+			if (reconn_num_++ >= globalctx_.cli_cfg_.retry_num) {
+				co_return ec_ignore;
+			}
+			
 			auto reconn_interval = (globalctx_.cli_cfg_.reconn_interval > 0 ? globalctx_.cli_cfg_.reconn_interval : 3);
 			co_await async_sleep(co_await asio::this_coro::executor, std::chrono::seconds(reconn_interval), asio::use_awaitable);
-			co_return co_await this->template co_start<IsKeepAlive>(this->host_, this->port_);
+			auto ec = co_await this->template co_start<IsKeepAlive>(this->host_, this->port_);
+			if (!ec) {
+				reconn_num_ = 0;
+			}
+			co_return ec;
 		}
 
 		inline auto& globalctx() { return globalctx_; }
@@ -303,5 +311,7 @@ namespace bnet::base {
 		dynamic_buffer<> rbuff_;
 
 		std::any user_data_;
+
+		int reconn_num_ = 0;
 	};
 }
