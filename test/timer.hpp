@@ -7,7 +7,7 @@ void timer_tst() {
     bnet::Timer timer(context);
     
 	// loop call
-	timer.start(std::chrono::seconds(5), [](std::error_code& ec) mutable {
+	timer.start(std::chrono::seconds(5), [](const std::error_code& ec) mutable {
 		if (ec) {
 			std::cerr << "err: " << ec.message() << std::endl;
 		}
@@ -26,7 +26,7 @@ void timer_tst1() {
     bnet::Timer timer(context);
 
 	// once call
-    timer.start<false>(std::chrono::seconds(5), [](std::error_code& ec) mutable {
+    timer.start<false>(std::chrono::seconds(5), [](const std::error_code& ec) mutable {
         if (ec) {
 			std::cerr << "err: " << ec.message() << std::endl;
 		}
